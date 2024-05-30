@@ -42,6 +42,10 @@ func (d *Dashboard) Start() error {
 	return d.app.Listen(":3000")
 }
 
+func (d *Dashboard) Stop() error {
+	return d.app.Shutdown()
+}
+
 func (d *Dashboard) Queues(c *fiber.Ctx) error {
 	tenantId := d.tenantManager.GetTenant()
 

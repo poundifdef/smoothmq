@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"errors"
+	"log"
 	"q/models"
 )
 
@@ -28,15 +29,30 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 
 func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
 	return []string{"a", "b"}, nil
-	// return nil, errors.New("not implemented")
 }
 
-func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message *models.Message) (int64, error) {
-	return 0, errors.New("not implemented")
+func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string) (int64, error) {
+	log.Println(tenantId, queue, message)
+	return 1, nil
 }
 
 func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([]*models.Message, error) {
-	return nil, errors.New("not implemented")
+	rc := []*models.Message{
+		{
+			ID:        1,
+			Status:    models.MessageStatusDequeued,
+			KeyValues: map[string]string{"a": "b", "c": "d"},
+			Message:   []byte("hello world"),
+		},
+		{
+			ID:        2,
+			Status:    models.MessageStatusDequeued,
+			KeyValues: map[string]string{"a": "e", "c": "f"},
+			Message:   []byte("hello world 2"),
+		},
+	}
+
+	return rc, nil
 }
 
 func (q *SQLiteQueue) Peek(tenantId int64, messageId int64) *models.Message {
@@ -59,8 +75,8 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 	return rc
 }
 
-func (q *SQLiteQueue) Delete(tenantId int64, messageId int64) error {
-	return errors.New("not implemented")
+func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) error {
+	return nil
 }
 
 func (q *SQLiteQueue) UpdateStatus(tenantId int64, messageId int64, newStatus models.MessageStatus) error {
