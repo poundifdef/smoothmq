@@ -1,0 +1,24 @@
+<h1>Queue {{.Queue}}</h1>
+<h2>Message {{.Message.ID}}</h2>
+
+<table class="ui celled table">
+    <tbody>
+    <tr>
+        <td>Status</td>
+        <td>{{.Message.Status}}</td>
+    </tr>
+    <tr>
+        <td>k/v</td>
+        <td>
+            {{range $k, $v := .Message.KeyValues}}
+            {{$k}}: {{$v}}
+            {{end}}
+        </td>
+    </tr>
+    <tr>
+        <td>Message</td>
+        <td>{{printf "%s" .Message.Message}}</td>
+    </tr>
+    </tbody>
+
+</table>

@@ -1,0 +1,26 @@
+<html>
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.3/dist/semantic.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.3/dist/semantic.min.js"></script>
+</head>
+
+<body>
+    <div class="ui container" style="margin-top: 20px;">
+
+        {{if .Err}}
+        <div class="ui container">
+        <div class="ui red message">{{.Err}}</div>
+        </div>
+        {{end}}
+
+    {{embed}}
+
+
+
+    </div>
+
+</body>
+
+</html>

@@ -1,0 +1,36 @@
+<h1>Queues</h1>
+
+<p>
+    Select a queue to view messages.
+</p>
+
+<form method="POST" action="/queues">
+    <div class="ui action input">
+        <input type="text" name="queue" placeholder="new-queue-name">
+        <button class="ui button">Create Queue</button>
+    </div>
+</form>
+
+<table class="ui table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Messages</th>
+            <th>&nbsp;</th>
+        </tr>
+    </thead>
+    <tbody>
+
+        {{range .Queues}}
+        <tr>
+            <td><a href="/queues/{{.Name}}">{{.Name}}</a></td>
+            <td> {{.Count}}</td>
+            <td>
+                <form method="post" action="/queues/{{.Name}}/delete" style="display:inline;">
+                    <button class="ui mini negative basic button">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>

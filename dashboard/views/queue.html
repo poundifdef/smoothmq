@@ -1,0 +1,59 @@
+<h1>Queue: {{.Queue}}</h1>
+
+<div class="ui grid">
+    <div class="sixteen wide column">
+        <div class="ui statistics">
+            <div class="ui small statistic">
+                <div class="value">
+                    {{index $.Stats.Counts 1}}
+                </div>
+                <div class="label">
+                    Queued
+                </div>
+            </div>
+            <div class="ui small statistic">
+                <div class="value">
+                    {{index $.Stats.Counts 2}}
+                </div>
+                <div class="label">
+                    Processing
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="sixteen wide column">
+        <p>Search for a speicfic message by ID, or filter based on key/value pairs.</p>
+        <form method="GET" action="/queues/{{.Queue}}">
+            <div class="ui fluid action input">
+                <input name="filter" type="text" placeholder="1795068458442948608 user_id=123 message_type=email">
+                <button type="submit" class="ui button">Filter</button>
+            </div>
+        </form>
+    </div>
+    <div class="sixteen wide column">
+        <table class="ui celled table">
+            <thead>
+              <tr><th>ID</th>
+              <th>Status</th>
+              <th>k/v</th>
+              <th>Message</th>
+            </tr></thead>
+            <tbody>
+            {{range .Messages}}
+              <tr>
+                <td>
+                    <a href="/queues/{{$.Queue}}/messages/{{.ID}}">{{.ID}}</a>
+                </td>
+                <td>{{.Status}}</td>
+                <td>
+                    {{range $k, $v := .KeyValues}}
+                    {{$k}}: {{$v}}
+                    {{end}}
+                </td>
+                <td>{{printf "%s" .Message}}</td>
+              </tr>
+            {{end}}
+            </tbody>
+          </table>
+    </div>
+</div>
