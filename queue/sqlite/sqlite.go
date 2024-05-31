@@ -1,8 +1,6 @@
 package sqlite
 
 import (
-	// "database/sql"
-	"database/sql"
 	"errors"
 	"log"
 	"os"
@@ -180,13 +178,12 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 	}
 
 	now := time.Now().UTC().Unix()
-	var messageId int64
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
 	query := `
-	SELECT id FROM messages
+	SELECT * FROM messages
 	WHERE (
 		(
 			(status = ? AND deliver_at <= ?)
@@ -196,34 +193,45 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 		AND tenant_id = ?
 		AND queue_id = ?
 	)
-	LIMIT 1
+	LIMIT ?
 	`
-	messageRow := q.db.QueryRow(
+
+	var rc []*models.Message
+
+	err = q.db.Select(
+		&rc,
 		query,
 		models.MessageStatusQueued, now,
 		models.MessageStatusDequeued, now, now,
 		tenantId, queueId,
+		numToDequeue,
 	)
-
-	err = messageRow.Scan(&messageId)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	} else if err != nil {
+	if err != nil {
 		return nil, err
+	}
+
+	if len(rc) == 0 {
+		return nil, nil
+	}
+
+	messageIDs := make([]int64, len(rc))
+	for i, message := range rc {
+		messageIDs[i] = message.ID
 	}
 
 	query = `
 	UPDATE messages
 	SET status = ?, updated_at = ?
-	WHERE tenant_id = ? AND queue_id = ? AND id = ?
+	WHERE tenant_id = ? AND queue_id = ? AND id IN (?)
 	`
-	result, err := q.db.Exec(
-		query,
-		models.MessageStatusDequeued, now,
-		queueId,
-		tenantId,
-		messageId,
-	)
+
+	query, args, err := sqlx.In(query, models.MessageStatusDequeued, now, tenantId, queueId, messageIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	query = q.db.Rebind(query)
+	result, err := q.db.Exec(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -233,18 +241,9 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 		return nil, err
 	}
 
-	if rowsAffected != 1 {
-		log.Printf("Dequeued unexpected number of messages %d rowsAffected %d", messageId, rowsAffected)
+	if rowsAffected != int64(len(messageIDs)) {
+		log.Printf("Dequeued unexpected number of messages %d rowsAffected %d", len(messageIDs), rowsAffected)
 		return nil, nil
-	}
-
-	rc := []*models.Message{
-		{
-			ID:        messageId,
-			Status:    models.MessageStatusDequeued,
-			KeyValues: map[string]string{"a": "b", "c": "d"},
-			Message:   []byte("hello world"),
-		},
 	}
 
 	return rc, nil
@@ -263,7 +262,42 @@ func (q *SQLiteQueue) Peek(tenantId int64, queue string, messageId int64) *model
 }
 
 func (q *SQLiteQueue) Stats(tenantId int64, queue string) models.QueueStats {
-	stats := models.QueueStats{}
+	queueId, err := q.queueId(tenantId, queue)
+	if err != nil {
+		return models.QueueStats{}
+	}
+
+	rows, err := q.db.Queryx(`
+		SELECT 
+		CASE
+			WHEN status = 2 AND updated_at + requeue_in <= ? THEN 1
+			ELSE status
+		END AS s,
+		count(*) FROM messages WHERE queue_id=? AND tenant_id=? GROUP BY s
+	`,
+		time.Now().UTC().Unix(),
+		queueId, tenantId,
+	)
+	if err != nil {
+		return models.QueueStats{}
+	}
+
+	stats := models.QueueStats{
+		Counts:        make(map[models.MessageStatus]int),
+		TotalMessages: 0,
+	}
+	for rows.Next() {
+		var statusType models.MessageStatus
+		var count int
+
+		rows.Scan(&statusType, &count)
+
+		stats.TotalMessages += count
+		stats.Counts[statusType] = count
+	}
+
+	rows.Close()
+
 	return stats
 }
 
@@ -275,7 +309,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 		return nil
 	}
 
-	err = q.db.Select(&rc, "SELECT id FROM messages WHERE tenant_id=? AND queue_id=? LIMIT 10", tenantId, queueId)
+	q.db.Select(&rc, "SELECT id FROM messages WHERE tenant_id=? AND queue_id=? LIMIT 10", tenantId, queueId)
 
 	return rc
 }
@@ -311,14 +345,6 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	}
 
 	return nil
-}
-
-func (q *SQLiteQueue) UpdateStatus(tenantId int64, messageId int64, newStatus models.MessageStatus) error {
-	return errors.New("not implemented")
-}
-
-func (q *SQLiteQueue) UpdateDeliverAt(tenantId int64, messageId int64, newStatus models.MessageStatus) error {
-	return errors.New("not implemented")
 }
 
 func (q *SQLiteQueue) Shutdown() error {

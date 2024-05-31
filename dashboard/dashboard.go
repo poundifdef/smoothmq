@@ -18,7 +18,7 @@ type Dashboard struct {
 func NewDashboard(queue models.Queue, tenantManager models.TenantManager) *Dashboard {
 	engine := html.New("./dashboard/views", ".html")
 	engine.Reload(true)
-	engine.Debug(true)
+	// engine.Debug(true)
 
 	app := fiber.New(fiber.Config{
 		Views: engine,
