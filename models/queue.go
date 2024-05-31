@@ -26,7 +26,7 @@ type Queue interface {
 	Enqueue(tenantId int64, queue string, message string) (int64, error)
 	Dequeue(tenantId int64, queue string, numToDequeue int) ([]*Message, error)
 
-	Peek(tenantId int64, messageId int64) *Message
+	Peek(tenantId int64, queue string, messageId int64) *Message
 	Stats(tenantId int64, queue string) QueueStats
 	Filter(tenantId int64, queue string, filterCriteria FilterCriteria) []int64
 

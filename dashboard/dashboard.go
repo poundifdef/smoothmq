@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"errors"
 	"q/models"
 	"strconv"
 
@@ -85,9 +86,12 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 	filterCriteria := models.FilterCriteria{}
 	filteredMessageIDs := d.queue.Filter(tenantId, queueName, filterCriteria)
 
-	messages := make([]*models.Message, len(filteredMessageIDs))
-	for i, messageId := range filteredMessageIDs {
-		messages[i] = d.queue.Peek(tenantId, messageId)
+	messages := make([]*models.Message, 0)
+	for _, messageId := range filteredMessageIDs {
+		message := d.queue.Peek(tenantId, queueName, messageId)
+		if message != nil {
+			messages = append(messages, message)
+		}
 	}
 
 	return c.Render("queue", fiber.Map{"Queue": queueName, "Stats": queueStats, "Messages": messages, "Filter": filterCriteria}, "layout")
@@ -99,9 +103,15 @@ func (d *Dashboard) Message(c *fiber.Ctx) error {
 	tenantId := d.tenantManager.GetTenant()
 
 	// TODO: check for errors
-	messageIdInt, _ := strconv.ParseInt(messageID, 10, 64)
+	messageIdInt, err := strconv.ParseInt(messageID, 10, 64)
+	if err != nil {
+		return err
+	}
 
-	message := d.queue.Peek(tenantId, messageIdInt)
+	message := d.queue.Peek(tenantId, queueName, messageIdInt)
+	if message == nil {
+		return errors.New("Message not found")
+	}
 
 	return c.Render("message", fiber.Map{"Queue": queueName, "Message": message}, "layout")
 }

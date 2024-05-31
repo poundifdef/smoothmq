@@ -3,6 +3,7 @@ module q
 go 1.22.2
 
 require (
+	github.com/bwmarrin/snowflake v0.3.0
 	github.com/gofiber/fiber/v2 v2.52.4
 	github.com/gofiber/template/html/v2 v2.1.1
 	github.com/mattn/go-sqlite3 v1.14.22
@@ -14,6 +15,7 @@ require (
 	github.com/gofiber/template v1.8.3 // indirect
 	github.com/gofiber/utils v1.1.0 // indirect
 	github.com/google/uuid v1.5.0 // indirect
+	github.com/jmoiron/sqlx v1.4.0 // indirect
 	github.com/klauspost/compress v1.17.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
