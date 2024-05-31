@@ -50,6 +50,7 @@ func Run(tm models.TenantManager) {
 
 	dashboardServer.Stop()
 	sqsServer.Stop()
+	queue.Shutdown()
 }
 
 func main() {

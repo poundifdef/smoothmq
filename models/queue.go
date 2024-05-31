@@ -33,4 +33,6 @@ type Queue interface {
 	Delete(tenantId int64, queue string, messageId int64) error
 	UpdateStatus(tenantId int64, messageId int64, newStatus MessageStatus) error
 	UpdateDeliverAt(tenantId int64, messageId int64, newStatus MessageStatus) error
+
+	Shutdown() error
 }
