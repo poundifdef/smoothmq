@@ -82,7 +82,9 @@ func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
 	tokens := strings.Split(req.QueueUrl, "/")
 	queue := tokens[len(tokens)-1]
 
-	messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody)
+	kv := make(map[string]string)
+
+	messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody, kv)
 	if err != nil {
 		return err
 	}

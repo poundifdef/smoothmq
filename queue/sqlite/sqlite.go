@@ -40,6 +40,11 @@ func NewSQLiteQueue() *SQLiteQueue {
 		log.Fatal(err)
 	}
 
+	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if newDb {
 		tx, err := db.Begin()
 		if err != nil {
@@ -48,8 +53,20 @@ func NewSQLiteQueue() *SQLiteQueue {
 
 		// TODO: check for errors
 		tx.Exec("CREATE TABLE queues (id integer primary key,name string, tenant_id integer)")
-		tx.Exec("CREATE TABLE messages (id integer primary key,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string)")
-		tx.Exec("CREATE TABLE kv (tenant_id integer, queue_id integer, message_id integer ,k string, v string)")
+		tx.Exec(`
+		CREATE TABLE messages 
+		(
+			id integer primary key,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
+			FOREIGN KEY(queue_id) REFERENCES queues(id) ON DELETE CASCADE
+		)
+		`)
+		tx.Exec(`
+		CREATE TABLE kv 
+		(tenant_id integer, queue_id integer, message_id integer ,k string, v string,
+		FOREIGN KEY(queue_id) REFERENCES queues(id) ON DELETE CASCADE,
+		FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+	)
+		`)
 		tx.Exec("CREATE UNIQUE INDEX idx_queues on queues (tenant_id,name);")
 		tx.Exec("CREATE INDEX idx_messages on messages (tenant_id, queue_id, status, deliver_at, updated_at);")
 		tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,k, v);")
@@ -92,12 +109,6 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 	err = row.Scan(&queueId)
 	if err != nil {
 		tx.Rollback()
-		return err
-	}
-
-	// TODO: check for errors
-	_, err = tx.Exec("DELETE FROM messages WHERE tenant_id = ? AND queue_id = ?", tenantId, queueId)
-	if err != nil {
 		return err
 	}
 
@@ -146,7 +157,7 @@ func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
 	return queueId, nil
 }
 
-func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string) (int64, error) {
+func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string) (int64, error) {
 	// TODO: make this configurable or a property of the queue
 	const defaultRequeueSeconds = 60
 
@@ -160,10 +171,30 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string) (int
 		return 0, err
 	}
 
-	_, err = q.db.Exec(
+	tx, err := q.db.Beginx()
+	if err != nil {
+		return 0, err
+	}
+
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
 		"INSERT INTO messages (id ,queue_id , deliver_at , status , tenant_id ,updated_at,message,requeue_in ) VALUES (?,?,?,?,?,?,?,?)",
 		messageId, queueId, 0, models.MessageStatusQueued, tenantId, time.Now().UTC().Unix(), message, defaultRequeueSeconds)
+	if err != nil {
+		return 0, err
+	}
 
+	for k, v := range kv {
+		_, err = tx.Exec("INSERT INTO kv (tenant_id, queue_id,k, v,message_id) VALUES (?,?,?,?,?)",
+			tenantId, queueId, k, v, messageId,
+		)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	err = tx.Commit()
 	if err != nil {
 		return 0, err
 	}
@@ -215,8 +246,10 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 	}
 
 	messageIDs := make([]int64, len(rc))
+	msgIndex := make(map[int64]int)
 	for i, message := range rc {
 		messageIDs[i] = message.ID
+		msgIndex[message.ID] = i
 	}
 
 	query = `
@@ -246,6 +279,27 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 		return nil, nil
 	}
 
+	query, args, err = sqlx.In("SELECT message_id,k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id IN (?)", tenantId, queueId, messageIDs)
+	if err == nil {
+		kvRows, err := q.db.Queryx(query, args...)
+		if err == nil {
+			for kvRows.Next() {
+				var k, v string
+				var messageId int64
+				kvRows.Scan(&messageId, &k, &v)
+
+				msgIdx, ok := msgIndex[messageId]
+				if ok {
+					if rc[msgIdx].KeyValues == nil {
+						rc[msgIdx].KeyValues = make(map[string]string)
+					}
+
+					rc[msgIdx].KeyValues[k] = v
+				}
+			}
+		}
+	}
+
 	return rc, nil
 }
 
@@ -256,7 +310,20 @@ func (q *SQLiteQueue) Peek(tenantId int64, queue string, messageId int64) *model
 	}
 
 	rc := &models.Message{}
+
 	q.db.Get(rc, "SELECT * FROM messages WHERE tenant_id=? AND queue_id=? AND id=?", tenantId, queueId, messageId)
+	rc.KeyValues = make(map[string]string)
+
+	rows, err := q.db.Queryx("SELECT k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id=?", tenantId, queueId, messageId)
+	if err != nil {
+		log.Println(err)
+	} else {
+		for rows.Next() {
+			var k, v string
+			rows.Scan(&k, &v)
+			rc.KeyValues[k] = v
+		}
+	}
 
 	return rc
 }

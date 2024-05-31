@@ -23,7 +23,7 @@ type Queue interface {
 	DeleteQueue(tenantId int64, queue string) error
 	ListQueues(tenantId int64) ([]string, error)
 
-	Enqueue(tenantId int64, queue string, message string) (int64, error)
+	Enqueue(tenantId int64, queue string, message string, kv map[string]string) (int64, error)
 	Dequeue(tenantId int64, queue string, numToDequeue int) ([]*Message, error)
 
 	Peek(tenantId int64, queue string, messageId int64) *Message
@@ -31,8 +31,6 @@ type Queue interface {
 	Filter(tenantId int64, queue string, filterCriteria FilterCriteria) []int64
 
 	Delete(tenantId int64, queue string, messageId int64) error
-	// UpdateStatus(tenantId int64, messageId int64, newStatus MessageStatus) error
-	// UpdateDeliverAt(tenantId int64, messageId int64, newStatus MessageStatus) error
 
 	Shutdown() error
 }
