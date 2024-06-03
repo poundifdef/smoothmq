@@ -3,9 +3,11 @@ package sqs
 // https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"q/models"
 	"strconv"
@@ -119,6 +121,14 @@ func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
 	queue := tokens[len(tokens)-1]
 
 	kv := make(map[string]string)
+	for k, v := range req.MessageAttributes {
+		kv[k+"_DataType"] = v.DataType
+		if v.DataType == "String" {
+			kv[k] = v.StringValue
+		} else if v.DataType == "Binary" {
+			kv[k] = v.BinaryValue
+		}
+	}
 
 	messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody, kv)
 	if err != nil {
@@ -154,9 +164,31 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 
 	for i, message := range messages {
 		response.Messages[i] = Message{
-			MessageId:     fmt.Sprintf("%d", message.ID),
-			ReceiptHandle: fmt.Sprintf("%d", message.ID),
-			Body:          string(message.Message),
+			MessageId:         fmt.Sprintf("%d", message.ID),
+			ReceiptHandle:     fmt.Sprintf("%d", message.ID),
+			Body:              string(message.Message),
+			MessageAttributes: make(map[string]MessageAttribute),
+		}
+
+		for k, v := range message.KeyValues {
+			if strings.HasSuffix(k, "_DataType") {
+				continue
+			}
+			attr := MessageAttribute{
+				DataType: message.KeyValues[k+"_DataType"],
+			}
+			if attr.DataType == "String" {
+				attr.StringValue = &v
+			} else if attr.DataType == "Binary" {
+				data, err := base64.StdEncoding.DecodeString(v)
+				if err != nil {
+					log.Println(message.ID, err)
+				} else {
+					attr.BinaryValue = data
+				}
+			}
+
+			response.Messages[i].MessageAttributes[k] = attr
 		}
 	}
 
