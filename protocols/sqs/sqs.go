@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/tidwall/gjson"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
@@ -30,9 +32,43 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager) *SQS {
 		tenantManager: tenantManager,
 	}
 
-	app.All("/*", s.Action)
+	app.Use(s.authMiddleware)
+	app.Post("/*", s.Action)
 
 	return s
+}
+
+func (s *SQS) authMiddleware(c *fiber.Ctx) error {
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
+
+	awsHeader, err := ParseAuthorizationHeader(r)
+	if err != nil {
+		return err
+	}
+
+	queueUrl := gjson.GetBytes(c.Body(), "QueueUrl")
+	queueTokens := strings.Split(queueUrl.Str, "/")
+	tenantIdStr := queueTokens[len(queueTokens)-2]
+	tenantId, err := strconv.ParseInt(tenantIdStr, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	secretKey, err := s.tenantManager.GetAWSSecretKey(tenantId, awsHeader.AccessKey, awsHeader.Region)
+	if err != nil {
+		return err
+	}
+
+	err = ValidateAWSRequest(awsHeader, secretKey, r)
+	if err != nil {
+		return err
+	}
+
+	c.Locals("tenantId", tenantId)
+	return c.Next()
 }
 
 func (s *SQS) Start() error {
@@ -53,7 +89,7 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 	var r *http.Request = &http.Request{}
 	fasthttpadaptor.ConvertRequest(c.Context(), r, false)
 
-	tenantId := s.tenantManager.GetTenantFromAWSRequest(r)
+	tenantId := c.Locals("tenantId").(int64)
 
 	switch awsMethod {
 	case "AmazonSQS.SendMessage":

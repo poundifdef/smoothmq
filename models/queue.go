@@ -1,6 +1,8 @@
 package models
 
 type FilterCriteria struct {
+	MessageID int64
+
 	// 0 means unbounded
 	DeliverAtStart int
 	DeliverAtEnd   int

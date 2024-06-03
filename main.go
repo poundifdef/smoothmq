@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"q/dashboard"
@@ -19,18 +18,16 @@ func (tm *DefaultTenantManager) GetTenant() int64 {
 	return 1
 }
 
-func (tm *DefaultTenantManager) GetTenantFromAWSRequest(r *http.Request) int64 {
-	return 1
+func (tm *DefaultTenantManager) GetAWSSecretKey(tenantID int64, accessKey string, region string) (string, error) {
+	return "YOUR_SECRET_ACCESS_KEY", nil
 }
 
 func NewDefaultTenantManager() models.TenantManager {
 	return &DefaultTenantManager{}
 }
 
-func Run(tm models.TenantManager) {
+func Run(tm models.TenantManager, queue models.Queue) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	queue := sqlite.NewSQLiteQueue()
 
 	dashboardServer := dashboard.NewDashboard(queue, tm)
 	go func() {
@@ -55,5 +52,6 @@ func Run(tm models.TenantManager) {
 
 func main() {
 	tenantManager := NewDefaultTenantManager()
-	Run(tenantManager)
+	queue := sqlite.NewSQLiteQueue()
+	Run(tenantManager, queue)
 }

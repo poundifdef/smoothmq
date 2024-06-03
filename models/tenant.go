@@ -1,8 +1,6 @@
 package models
 
-import "net/http"
-
 type TenantManager interface {
 	GetTenant() int64
-	GetTenantFromAWSRequest(r *http.Request) int64
+	GetAWSSecretKey(tenantID int64, accessKey string, region string) (string, error)
 }
