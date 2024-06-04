@@ -376,7 +376,43 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 		return nil
 	}
 
-	q.db.Select(&rc, "SELECT id FROM messages WHERE tenant_id=? AND queue_id=? LIMIT 10", tenantId, queueId)
+	args := make([]any, 0)
+	args = append(args, tenantId)
+	args = append(args, queueId)
+
+	sql := "SELECT id FROM messages WHERE tenant_id=? AND queue_id=? "
+
+	if filterCriteria.MessageID > 0 {
+		sql += " AND id = ? "
+		args = append(args, filterCriteria.MessageID)
+	}
+
+	if len(filterCriteria.KV) > 0 {
+		sql += " AND "
+		sql += " id IN (SELECT message_id FROM kv WHERE ("
+
+		for i := range len(filterCriteria.KV) {
+			sql += "(k=? AND v=?)"
+
+			if i < len(filterCriteria.KV)-1 {
+				sql += " OR "
+			}
+		}
+
+		sql += " ) GROUP BY message_id HAVING count(*) = ? LIMIT 10"
+		sql += " ) "
+
+	}
+
+	for k, v := range filterCriteria.KV {
+		args = append(args, k, v)
+	}
+
+	args = append(args, len(filterCriteria.KV))
+
+	sql += "LIMIT 10"
+
+	q.db.Select(&rc, sql, args...)
 
 	return rc
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"q/models"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
@@ -83,7 +84,25 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 	tenantId := d.tenantManager.GetTenant()
 	queueStats := d.queue.Stats(tenantId, queueName)
 
-	filterCriteria := models.FilterCriteria{}
+	filterCriteria := models.FilterCriteria{
+		KV: make(map[string]string),
+	}
+	filterString := c.Query("filter")
+
+	filterFields := strings.Fields(filterString)
+	for _, field := range filterFields {
+		maybeMessageID, err := strconv.ParseInt(field, 10, 64)
+		if err == nil {
+			filterCriteria.MessageID = maybeMessageID
+		}
+
+		if strings.Contains(field, "=") {
+			tokens := strings.Split(field, "=")
+			filterCriteria.KV[strings.TrimSpace(tokens[0])] = strings.TrimSpace(tokens[1])
+		}
+
+	}
+
 	filteredMessageIDs := d.queue.Filter(tenantId, queueName, filterCriteria)
 
 	messages := make([]*models.Message, 0)
@@ -94,7 +113,7 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.Render("queue", fiber.Map{"Queue": queueName, "Stats": queueStats, "Messages": messages, "Filter": filterCriteria}, "layout")
+	return c.Render("queue", fiber.Map{"Queue": queueName, "Stats": queueStats, "Messages": messages, "Filter": filterString}, "layout")
 }
 
 func (d *Dashboard) Message(c *fiber.Ctx) error {
