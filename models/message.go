@@ -1,5 +1,10 @@
 package models
 
+import (
+	"encoding/base64"
+	"encoding/json"
+)
+
 type MessageStatus uint8
 
 const (
@@ -22,4 +27,17 @@ type Message struct {
 	QueueID int64 `db:"queue_id"`
 
 	KeyValues map[string]string
+}
+
+func (m Message) Base64Decode() []byte {
+	data, err := base64.StdEncoding.DecodeString(string(m.Message))
+	if err != nil {
+		return m.Message
+	}
+
+	return data
+}
+
+func (m Message) IsJSON() bool {
+	return json.Valid(m.Message)
 }

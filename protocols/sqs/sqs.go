@@ -11,6 +11,7 @@ aws sqs send-message --queue-url https://sqs.us-east-1.amazonaws.com/1/a --messa
 aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
 aws sqs delete-message --receipt-handle x --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
 aws sqs create-queue --queue-name b --endpoint-url http://localhost:3001
+aws sqs get-queue-attributes --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
 */
 
 import (
@@ -106,6 +107,8 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 
 	tenantId := c.Locals("tenantId").(int64)
 
+	log.Println(awsMethod)
+
 	switch awsMethod {
 	case "AmazonSQS.SendMessage":
 		return s.SendMessage(c, tenantId)
@@ -117,10 +120,59 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 		return s.ListQueues(c, tenantId)
 	case "AmazonSQS.CreateQueue":
 		return s.CreateQueue(c, tenantId)
+	case "AmazonSQS.GetQueueAttributes":
+		return s.GetQueueAttributes(c, tenantId)
+	case "AmazonSQS.PurgeQueue":
+		return s.PurgeQueue(c, tenantId)
 	default:
 		return fmt.Errorf("SQS method %s not implemented", awsMethod)
 	}
 
+}
+
+func (s *SQS) PurgeQueue(c *fiber.Ctx, tenantId int64) error {
+	req := &PurgeQueueRequest{}
+
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return err
+	}
+
+	tokens := strings.Split(req.QueueUrl, "/")
+	queue := tokens[len(tokens)-1]
+
+	messages := s.queue.Filter(tenantId, queue, models.FilterCriteria{})
+	for _, msg := range messages {
+		s.queue.Delete(tenantId, queue, msg)
+	}
+
+	rc := PurgeQueueResponse{
+		Success: true,
+	}
+
+	return c.JSON(rc)
+}
+
+func (s *SQS) GetQueueAttributes(c *fiber.Ctx, tenantId int64) error {
+	req := &GetQueueAttributesRequest{}
+
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return err
+	}
+
+	tokens := strings.Split(req.QueueUrl, "/")
+	queue := tokens[len(tokens)-1]
+
+	stats := s.queue.Stats(tenantId, queue)
+
+	rc := GetQueueAttributesResponse{
+		Attributes: map[string]string{
+			"ApproximateNumberOfMessages": fmt.Sprintf("%d", stats.TotalMessages),
+		},
+	}
+
+	return c.JSON(rc)
 }
 
 func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
@@ -216,6 +268,8 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 	if req.MaxNumberOfMessages == 0 {
 		req.MaxNumberOfMessages = 1
 	}
+
+	// log.Println(req)
 
 	tokens := strings.Split(req.QueueUrl, "/")
 	queue := tokens[len(tokens)-1]

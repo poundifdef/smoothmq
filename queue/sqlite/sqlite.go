@@ -426,14 +426,17 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 		return err
 	}
 
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	query := `
 	DELETE FROM messages
 	WHERE tenant_id = ? AND queue_id = ? AND id = ?
 	`
 	result, err := q.db.Exec(
 		query,
-		queueId,
 		tenantId,
+		queueId,
 		messageId,
 	)
 	if err != nil {

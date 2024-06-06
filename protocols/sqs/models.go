@@ -78,3 +78,20 @@ type CreateQueueRequest struct {
 type CreateQueueResponse struct {
 	QueueUrl string `json:"QueueUrl"`
 }
+
+type GetQueueAttributesRequest struct {
+	QueueUrl       string   `json:"QueueUrl"`
+	AttributeNames []string `json:"AttributeNames,omitempty"`
+}
+
+type GetQueueAttributesResponse struct {
+	Attributes map[string]string `json:"Attributes"`
+}
+
+type PurgeQueueRequest struct {
+	QueueUrl string `json:"QueueUrl"`
+}
+
+type PurgeQueueResponse struct {
+	Success bool `json:"Success"`
+}
