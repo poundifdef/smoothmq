@@ -25,7 +25,7 @@ type Queue interface {
 	DeleteQueue(tenantId int64, queue string) error
 	ListQueues(tenantId int64) ([]string, error)
 
-	Enqueue(tenantId int64, queue string, message string, kv map[string]string) (int64, error)
+	Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int, requeueIn int) (int64, error)
 	Dequeue(tenantId int64, queue string, numToDequeue int) ([]*Message, error)
 
 	Peek(tenantId int64, queue string, messageId int64) *Message

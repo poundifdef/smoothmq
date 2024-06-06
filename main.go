@@ -18,8 +18,8 @@ func (tm *DefaultTenantManager) GetTenant() int64 {
 	return 1
 }
 
-func (tm *DefaultTenantManager) GetAWSSecretKey(tenantID int64, accessKey string, region string) (string, error) {
-	return "YOUR_SECRET_ACCESS_KEY", nil
+func (tm *DefaultTenantManager) GetAWSSecretKey(accessKey string, region string) (int64, string, error) {
+	return int64(1), "YOUR_SECRET_ACCESS_KEY", nil
 }
 
 func NewDefaultTenantManager() models.TenantManager {

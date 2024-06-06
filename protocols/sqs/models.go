@@ -49,7 +49,7 @@ type Message struct {
 }
 
 type MessageAttribute struct {
-	StringValue      *string  `json:"StringValue,omitempty"`
+	StringValue      string   `json:"StringValue,omitempty"`
 	BinaryValue      []byte   `json:"BinaryValue,omitempty"`
 	StringListValues []string `json:"StringListValues,omitempty"`
 	BinaryListValues [][]byte `json:"BinaryListValues,omitempty"`
@@ -59,4 +59,22 @@ type MessageAttribute struct {
 type DeleteMessageRequest struct {
 	QueueUrl      string `json:"QueueUrl"`
 	ReceiptHandle string `json:"ReceiptHandle"`
+}
+
+type ListQueuesRequest struct {
+	QueueNamePrefix string `json:"QueueNamePrefix,omitempty"`
+}
+
+type ListQueuesResponse struct {
+	QueueUrls []string `json:"QueueUrls"`
+}
+
+type CreateQueueRequest struct {
+	QueueName  string            `json:"QueueName"`
+	Attributes map[string]string `json:"Attributes,omitempty"`
+	Tags       map[string]string `json:"Tags,omitempty"`
+}
+
+type CreateQueueResponse struct {
+	QueueUrl string `json:"QueueUrl"`
 }

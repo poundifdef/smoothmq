@@ -157,19 +157,22 @@ func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
 	return queueId, nil
 }
 
-func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string) (int64, error) {
-	// TODO: make this configurable or a property of the queue
-	const defaultRequeueSeconds = 60
+func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int, requeueIn int) (int64, error) {
+	// TODO: make some params configurable or a property of the queue
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	messageId := q.snow.Generate().Int64()
+	messageSnow := q.snow.Generate()
+	messageId := messageSnow.Int64()
 
 	queueId, err := q.queueId(tenantId, queue)
 	if err != nil {
 		return 0, err
 	}
+
+	now := time.Now().UTC().Unix()
+	deliverAt := now + int64(delay)
 
 	tx, err := q.db.Beginx()
 	if err != nil {
@@ -180,7 +183,7 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 
 	_, err = tx.Exec(
 		"INSERT INTO messages (id ,queue_id , deliver_at , status , tenant_id ,updated_at,message,requeue_in ) VALUES (?,?,?,?,?,?,?,?)",
-		messageId, queueId, 0, models.MessageStatusQueued, tenantId, time.Now().UTC().Unix(), message, defaultRequeueSeconds)
+		messageId, queueId, 0, models.MessageStatusQueued, tenantId, deliverAt, message, requeueIn)
 	if err != nil {
 		return 0, err
 	}

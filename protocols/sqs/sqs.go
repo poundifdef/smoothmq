@@ -1,21 +1,36 @@
 package sqs
 
-// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html
+/*
+Docs:
+https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html
+https://docs.aws.amazon.com/cli/latest/reference/sqs/delete-message.html
+
+Testing:
+aws sqs list-queues --endpoint-url http://localhost:3001
+aws sqs send-message --queue-url https://sqs.us-east-1.amazonaws.com/1/a --message-body "hello world" --endpoint-url http://localhost:3001
+aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
+aws sqs delete-message --receipt-handle x --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
+aws sqs create-queue --queue-name b --endpoint-url http://localhost:3001
+*/
 
 import (
+	"crypto/md5"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"q/models"
 	"strconv"
 	"strings"
 
+	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
-	"github.com/tidwall/gjson"
+	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
@@ -27,6 +42,12 @@ type SQS struct {
 
 func NewSQS(queue models.Queue, tenantManager models.TenantManager) *SQS {
 	app := fiber.New(fiber.Config{})
+
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger()
+
+	app.Use(fiberzerolog.New(fiberzerolog.Config{
+		Logger: &logger,
+	}))
 
 	s := &SQS{
 		app:           app,
@@ -51,15 +72,7 @@ func (s *SQS) authMiddleware(c *fiber.Ctx) error {
 		return err
 	}
 
-	queueUrl := gjson.GetBytes(c.Body(), "QueueUrl")
-	queueTokens := strings.Split(queueUrl.Str, "/")
-	tenantIdStr := queueTokens[len(queueTokens)-2]
-	tenantId, err := strconv.ParseInt(tenantIdStr, 10, 64)
-	if err != nil {
-		return err
-	}
-
-	secretKey, err := s.tenantManager.GetAWSSecretKey(tenantId, awsHeader.AccessKey, awsHeader.Region)
+	tenantId, secretKey, err := s.tenantManager.GetAWSSecretKey(awsHeader.AccessKey, awsHeader.Region)
 	if err != nil {
 		return err
 	}
@@ -100,15 +113,59 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 		return s.ReceiveMessage(c, tenantId)
 	case "AmazonSQS.DeleteMessage":
 		return s.DeleteMessage(c, tenantId)
+	case "AmazonSQS.ListQueues":
+		return s.ListQueues(c, tenantId)
+	case "AmazonSQS.CreateQueue":
+		return s.CreateQueue(c, tenantId)
 	default:
 		return fmt.Errorf("SQS method %s not implemented", awsMethod)
 	}
 
 }
 
+func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
+	req := &CreateQueueRequest{}
+
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return err
+	}
+
+	err = s.queue.CreateQueue(tenantId, req.QueueName)
+	if err != nil {
+		return err
+	}
+
+	queueUrl := fmt.Sprintf("https://sqs.us-east-1.amazonaws.com/%d/%s", tenantId, req.QueueName)
+	rc := CreateQueueResponse{
+		QueueUrl: queueUrl,
+	}
+
+	return c.JSON(rc)
+}
+
+func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
+	queues, err := s.queue.ListQueues(tenantId)
+	if err != nil {
+		return err
+	}
+
+	queueUrls := make([]string, len(queues))
+
+	for i, queue := range queues {
+		queueUrls[i] = fmt.Sprintf("https://sqs.us-east-1.amazonaws.com/%d/%s", tenantId, queue)
+	}
+
+	rc := ListQueuesResponse{
+		QueueUrls: queueUrls,
+	}
+
+	return c.JSON(rc)
+}
+
 func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
-	// TODO: DelaySeconds
-	// TODO: MessageAttributes
+	// TODO: make this configurable on queue
+	visibilityTimeout := 30
 
 	req := &SendMessagePayload{}
 
@@ -125,18 +182,24 @@ func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
 		kv[k+"_DataType"] = v.DataType
 		if v.DataType == "String" {
 			kv[k] = v.StringValue
+		} else if v.DataType == "Number" {
+			kv[k] = v.StringValue
 		} else if v.DataType == "Binary" {
 			kv[k] = v.BinaryValue
 		}
 	}
 
-	messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody, kv)
+	messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody, kv, req.DelaySeconds, visibilityTimeout)
 	if err != nil {
 		return err
 	}
 
+	hasher := md5.New()
+	hasher.Write([]byte(req.MessageBody))
+
 	response := SendMessageResponse{
-		MessageId: fmt.Sprintf("%d", messageId),
+		MessageId:        fmt.Sprintf("%d", messageId),
+		MD5OfMessageBody: hex.EncodeToString(hasher.Sum(nil)),
 	}
 
 	return c.JSON(response)
@@ -148,6 +211,10 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 	err := json.Unmarshal(c.Body(), req)
 	if err != nil {
 		return err
+	}
+
+	if req.MaxNumberOfMessages == 0 {
+		req.MaxNumberOfMessages = 1
 	}
 
 	tokens := strings.Split(req.QueueUrl, "/")
@@ -162,12 +229,18 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 		Messages: make([]Message, len(messages)),
 	}
 
+	hasher := md5.New()
+
 	for i, message := range messages {
+		hasher.Reset()
+		hasher.Write(message.Message)
+
 		response.Messages[i] = Message{
 			MessageId:         fmt.Sprintf("%d", message.ID),
 			ReceiptHandle:     fmt.Sprintf("%d", message.ID),
 			Body:              string(message.Message),
 			MessageAttributes: make(map[string]MessageAttribute),
+			MD5OfBody:         hex.EncodeToString(hasher.Sum(nil)),
 		}
 
 		for k, v := range message.KeyValues {
@@ -178,7 +251,9 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 				DataType: message.KeyValues[k+"_DataType"],
 			}
 			if attr.DataType == "String" {
-				attr.StringValue = &v
+				attr.StringValue = v
+			} else if attr.DataType == "Number" {
+				attr.StringValue = v
 			} else if attr.DataType == "Binary" {
 				data, err := base64.StdEncoding.DecodeString(v)
 				if err != nil {
