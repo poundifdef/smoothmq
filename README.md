@@ -28,25 +28,14 @@ This works with any SQS client in any language.
 import boto3
 
 # Simply change the endpoint_url
-sqs = boto3.client('sqs',
-    aws_access_key_id='ACCESS_KEY', aws_secret_access_key='SECRET_KEY',
-    region_name='us-east-1',
-    endpoint_url='http://localhost:3001'
-)
-
-sqs.send_message(
-    QueueUrl='https://sqs.us-east-1.amazonaws.com/1/my_queue'
-    MessageBody="hello world"
-)
+sqs = boto3.client('sqs', ..., endpoint_url='http://localhost:3001')
+sqs.send_message(QueueUrl='...', MessageBody="hello world")
 ```
 
-Celery also works seamlessly:
+Celery works seamlessly:
 
 ``` py
-app = Celery("tasks",
-    broker_url=f"sqs://ACCESS_KEY:SECRET_KEY@localhost:3001",
-    broker_transport_options={"region": "us-east-1"},
-)
+app = Celery("tasks", broker_url=f"sqs://...:...@localhost:3001")
 ```
 
 ## UI
