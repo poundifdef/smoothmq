@@ -28,14 +28,14 @@ This works with any SQS client in any language.
 import boto3
 
 # Simply change the endpoint_url
-sqs = boto3.client('sqs', ..., endpoint_url='http://localhost:3001')
-sqs.send_message(QueueUrl='...', MessageBody="hello world")
+sqs = boto3.client("sqs", ..., endpoint_url="http://localhost:3001")
+sqs.send_message(QueueUrl="...", MessageBody="hello world")
 ```
 
 Celery works seamlessly:
 
 ``` py
-app = Celery("tasks", broker_url=f"sqs://...:...@localhost:3001")
+app = Celery("tasks", broker_url="sqs://...@localhost:3001")
 ```
 
 ## UI
