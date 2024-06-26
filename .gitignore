@@ -23,3 +23,8 @@ go.work.sum
 
 # env file
 .env
+
+scratch/
+
+*.sqlite
+*.db

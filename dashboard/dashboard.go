@@ -1,7 +1,11 @@
 package dashboard
 
 import (
+	"embed"
 	"errors"
+	"io/fs"
+	"log"
+	"net/http"
 	"q/models"
 	"strconv"
 	"strings"
@@ -10,6 +14,9 @@ import (
 	"github.com/gofiber/template/html/v2"
 )
 
+//go:embed views/*
+var viewsfs embed.FS
+
 type Dashboard struct {
 	app           *fiber.App
 	queue         models.Queue
@@ -17,9 +24,15 @@ type Dashboard struct {
 }
 
 func NewDashboard(queue models.Queue, tenantManager models.TenantManager) *Dashboard {
-	engine := html.New("./dashboard/views", ".html")
-	engine.Reload(true)
-	// engine.Debug(true)
+	http.FS(viewsfs)
+	fs2, err := fs.Sub(viewsfs, "views")
+	if err != nil {
+		log.Fatal(err)
+	}
+	engine := html.NewFileSystem(http.FS(fs2), ".html")
+	// engine := html.New("./dashboard/views", ".html")
+	// engine.Reload(true)
+	engine.Debug(true)
 
 	app := fiber.New(fiber.Config{
 		Views: engine,

@@ -10,20 +10,43 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/bwmarrin/snowflake"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type SQLiteQueue struct {
-	Filename string
+	filename string
 	db       *sqlx.DB
 	mu       *sync.Mutex
 	snow     *snowflake.Node
+	ticker   *time.Ticker
 }
 
+var fd *os.File
+
+var queueDiskSize = promauto.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "queue_disk_size",
+		Help: "Size of queue data on disk",
+	},
+)
+
+var queueMessageCount = promauto.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "queue_message_count",
+		Help: "Number of messages in queue",
+	},
+	[]string{"tenant_id", "queue", "status"},
+)
+
 func NewSQLiteQueue() *SQLiteQueue {
-	filename := "queue.db"
+	fd, _ = os.Create("q.txt")
+
+	filename := "/data/queue.db"
+	// filename := "q624.db"
 
 	snow, err := snowflake.NewNode(1)
 	if err != nil {
@@ -56,7 +79,7 @@ func NewSQLiteQueue() *SQLiteQueue {
 		tx.Exec(`
 		CREATE TABLE messages 
 		(
-			id integer primary key,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
+			id integer primary key AUTOINCREMENT ,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
 			FOREIGN KEY(queue_id) REFERENCES queues(id) ON DELETE CASCADE
 		)
 		`)
@@ -74,12 +97,28 @@ func NewSQLiteQueue() *SQLiteQueue {
 		tx.Commit()
 	}
 
-	return &SQLiteQueue{
-		Filename: filename,
+	rc := &SQLiteQueue{
+		filename: filename,
 		db:       db,
 		mu:       &sync.Mutex{},
 		snow:     snow,
+		ticker:   time.NewTicker(1 * time.Second),
 	}
+
+	go func() {
+		for {
+			select {
+			case <-rc.ticker.C:
+				// stat, err := os.Stat("q.txt")
+				stat, err := os.Stat(rc.filename)
+				if err == nil {
+					queueDiskSize.Set(float64(stat.Size()))
+				}
+			}
+		}
+	}()
+
+	return rc
 }
 
 func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string) error {
@@ -160,20 +199,33 @@ func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
 func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int, requeueIn int) (int64, error) {
 	// TODO: make some params configurable or a property of the queue
 
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	// fd.WriteString(message)
+	// fd.Write([]byte{'\n'})
 
 	messageSnow := q.snow.Generate()
 	messageId := messageSnow.Int64()
 
+	// return messageId, nil
+
 	queueId, err := q.queueId(tenantId, queue)
 	if err != nil {
-		return 0, err
+		err = q.CreateQueue(tenantId, queue)
+		if err != nil {
+			return 0, err
+		}
+
+		queueId, err = q.queueId(tenantId, queue)
+		if err != nil {
+			return 0, err
+
+		}
 	}
 
 	now := time.Now().UTC().Unix()
 	deliverAt := now + int64(delay)
 
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	tx, err := q.db.Beginx()
 	if err != nil {
 		return 0, err

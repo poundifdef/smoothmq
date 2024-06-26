@@ -3,13 +3,16 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"q/dashboard"
 	"q/models"
 	"q/protocols/sqs"
-	"q/queue/sqlite"
+	"q/queue/pebble"
 	"syscall"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type DefaultTenantManager struct{}
@@ -39,6 +42,11 @@ func Run(tm models.TenantManager, queue models.Queue) {
 		sqsServer.Start()
 	}()
 
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(":2112", nil)
+	}()
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
@@ -52,6 +60,7 @@ func Run(tm models.TenantManager, queue models.Queue) {
 
 func main() {
 	tenantManager := NewDefaultTenantManager()
-	queue := sqlite.NewSQLiteQueue()
+	// queue := sqlite.NewSQLiteQueue()
+	queue := pebble.NewPebbleQueue()
 	Run(tenantManager, queue)
 }
