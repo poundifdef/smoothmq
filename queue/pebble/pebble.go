@@ -73,6 +73,23 @@ func NewPebbleQueue() *PebbleQueue {
 		for {
 			select {
 			case <-rc.ticker.C:
+
+				i, err := db.NewIter(
+					&pebble.IterOptions{
+						// UpperBound: []byte{1 << 7, 0, 0, 0, 0, 0, 0, 0},
+					},
+				)
+				if err != nil {
+					log.Println(err)
+				}
+
+				log.Println(i.First(), i.Valid())
+
+				for i.First(); i.Valid(); i.Next() {
+					log.Println(i.Key())
+					break
+				}
+
 				rc.mu.Lock()
 				log.Println("queued size", rc.queued.GetSizeInBytes(), rc.queued.GetCardinality())
 				log.Println("dequeued size", rc.dequeued.GetSizeInBytes(), rc.dequeued.GetCardinality())
@@ -328,14 +345,36 @@ func (q *PebbleQueue) Filter(tenantId int64, queue string, filterCriteria models
 }
 
 func (q *PebbleQueue) Delete(tenantId int64, queue string, messageId int64) error {
+	q.mu.Lock()
+	q.queued.Remove(uint64(messageId))
+	q.dequeued.Remove(uint64(messageId))
+	q.mu.Unlock()
+
+	var idBytes [8]byte
+	binary.BigEndian.PutUint64(idBytes[:], uint64(messageId))
+
+	var idBytesRemoved [8]byte
+	binary.BigEndian.PutUint64(idBytesRemoved[:], uint64(messageId))
+	idBytesRemoved[0] = idBytesRemoved[0] | (1 << 7)
+
+	batch := q.db.NewBatch()
+	defer batch.Close()
+
+	err := batch.Delete(idBytes[:], pebble.Sync)
+	if err != nil {
+		return err
+	}
+	err = batch.Delete(idBytesRemoved[:], pebble.Sync)
+	if err != nil {
+		return err
+	}
+
+	err = batch.Commit(pebble.Sync)
+	if err != nil {
+		return err
+	}
+
 	return nil
-
-	var b [8]byte
-	b[0] = b[0] | (1 << 7)
-	binary.BigEndian.PutUint64(b[:], uint64(messageId))
-	err := q.db.Delete(b[:], pebble.Sync)
-
-	return err
 }
 
 func (q *PebbleQueue) Shutdown() error {
