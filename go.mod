@@ -6,6 +6,7 @@ require (
 	github.com/RoaringBitmap/roaring/v2 v2.3.0
 	github.com/bwmarrin/snowflake v0.3.0
 	github.com/cockroachdb/pebble v1.1.1
+	github.com/go-restruct/restruct v1.2.0-alpha
 	github.com/gofiber/contrib/fiberzerolog v1.0.1
 	github.com/gofiber/fiber/v2 v2.52.4
 	github.com/gofiber/template/html/v2 v2.1.1
