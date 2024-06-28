@@ -53,7 +53,7 @@ const (
 	MessageQueued MessageStatus = 1
 	MessageDequed MessageStatus = 2
 
-	MaxReadyQueueMessages uint64 = 50_000
+	MaxReadyQueueMessages uint64 = 5
 )
 
 func NewPebbleQueue() *PebbleQueue {
@@ -189,11 +189,19 @@ func now() int64 {
 
 func (q *PebbleQueue) printQueueStats() {
 	zl.Logger = zl.Output(zerolog.ConsoleWriter{Out: os.Stderr}).With().Caller().Logger()
+	zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	for tenantId, queues := range q.queued {
 		for queue, messages := range queues {
-			zl.Debug().Int64("tenant", tenantId).Str("queue", queue).Uint64("messages", messages.GetCardinality()).Send()
+			zl.Trace().Int64("tenant", tenantId).Str("queue", queue).Uint64("messages", messages.GetCardinality()).Send()
 		}
 	}
+
+	for tenantId, queues := range q.dequeued {
+		for queue, messages := range queues {
+			zl.Trace().Int64("tenant", tenantId).Str("queue", queue).Uint64("dequeued", messages.GetCardinality()).Send()
+		}
+	}
+
 }
 
 func (q *PebbleQueue) fillReadyQueue() {
@@ -264,7 +272,10 @@ func (q *PebbleQueue) fillReadyQueue() {
 				maxDequeued = dequeued.Maximum()
 			}
 
+			// log.Println(maxQueued, maxDequeued)
+
 			maxItem := max(maxQueued, maxDequeued) + 1
+			// log.Println(maxItem)
 
 			lowerBound := NewMetadataKey()
 			lowerBound.TenantID = queueKey.TenantID
@@ -287,6 +298,7 @@ func (q *PebbleQueue) fillReadyQueue() {
 
 			upperBoundBytes, _ := upperBound.Bytes()
 
+			// zl.Debug().Interface("lower", lowerBound).Interface("upper", upperBound).Send()
 			// maxQueuedBytes := make([]byte, 8)
 			// binary.BigEndian.PutUint64(maxQueuedBytes, maxItem)
 
@@ -303,10 +315,17 @@ func (q *PebbleQueue) fillReadyQueue() {
 			}
 
 			for msgIter.First(); msgIter.Valid(); msgIter.Next() {
+
+				// log.Println(lowerBoundBytes)
 				// log.Println(msgIter.Key())
 				msgMeta := NewMetadataKey()
 				msgMeta.Fill(msgIter.Key())
+				// log.Println(msgMeta.MessageID, msgMeta.Status)
 				// // // _, _, id, _, _ := KeyToMetadata(iter.Key())
+				// log.Println(lowerBound.MessageID)
+				// log.Println(msgMeta.MessageID)
+				// log.Println(lowerBound.MessageID - msgMeta.MessageID)
+
 				queued.Add(uint64(msgMeta.MessageID))
 
 				if queued.GetCardinality() >= MaxReadyQueueMessages {
@@ -459,39 +478,71 @@ func (q *PebbleQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	return nil, nil
-	// if q.queued.GetCardinality() == 0 {
-	// 	return nil, nil
-	// }
+	queues, ok := q.queued[tenantId]
+	if !ok {
+		return nil, nil
+	}
 
-	// iter := q.queued.ManyIterator()
-	// items := make([]uint64, numToDequeue)
-	// numItems := iter.NextMany(items)
+	queued, ok := queues[queue]
+	if !ok {
+		return nil, nil
+	}
 
-	// rc := make([]*models.Message, numItems)
+	dequeues, ok := q.dequeued[tenantId]
+	if !ok {
+		return nil, nil
+	}
+
+	dequeued, ok := dequeues[queue]
+	if !ok {
+		return nil, nil
+	}
+
+	if queued.GetCardinality() == 0 {
+		return nil, nil
+	}
+
+	iter := queued.ManyIterator()
+
+	msgIds := make([]uint64, numToDequeue)
+	iter.NextMany(msgIds)
+
+	rc := make([]*models.Message, 0)
 
 	// k := make([]byte, 8)
-	// for i := range numItems {
-	// 	binary.BigEndian.PutUint64(k, items[i])
-	// 	val, closer, err := q.db.Get(k)
-	// 	if err != nil {
-	// 		log.Println(err)
-	// 		continue
-	// 	}
-	// 	v := make([]byte, len(val))
-	// 	copy(v, val)
-	// 	rc[i] = &models.Message{
-	// 		ID:      int64(items[i]),
-	// 		Message: v,
-	// 	}
-	// 	closer.Close()
+	for _, msgId := range msgIds {
+		log.Println(msgId)
+		msgKey := NewMessageKey()
+		msgKey.TenantID = tenantId
+		msgKey.Queue = queue
+		msgKey.MessageID = int64(msgId)
+		msgKeyBytes, _ := msgKey.Bytes()
+		// 	binary.BigEndian.PutUint64(k, items[i])
+		val, closer, err := q.db.Get(msgKeyBytes)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		v := make([]byte, len(val))
+		copy(v, val)
+		rc = append(rc, &models.Message{
+			ID:      int64(msgId),
+			Message: v,
+		})
+		closer.Close()
 
-	// 	q.dequeued.Add(items[i])
-	// 	q.queued.Remove(items[i])
+		log.Println(msgId)
+		log.Println(queued.Contains(msgId))
+		log.Println(dequeued.Contains(msgId))
 
-	// }
+		dequeued.Add(msgId)
+		queued.Remove(msgId)
 
-	// return rc, nil
+		log.Println(queued.Contains(msgId))
+		log.Println(dequeued.Contains(msgId))
+	}
+
+	return rc, nil
 
 }
 
