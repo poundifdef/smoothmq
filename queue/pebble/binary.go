@@ -61,8 +61,8 @@ type MetadataKey struct {
 	TenantID  int64  `struct:"int64,big"`
 	Queue     string `struct:"[10]byte"`
 	Status    byte   `struct:byte`
-	MessageID int64  `struct:"int64,big"`
 	Timestamp int64  `struct:"int64,big"`
+	MessageID int64  `struct:"int64,big"`
 }
 
 func NewMetadataKey() *MetadataKey {

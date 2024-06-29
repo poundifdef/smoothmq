@@ -1,18 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"flag"
 	"log"
-	"net/http"
-	"os"
-	"os/signal"
-	"q/dashboard"
+	"q/cmd/smoothmq"
+	"q/cmd/tester"
 	"q/models"
-	"q/protocols/sqs"
-	"q/queue/pebble"
-	"syscall"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"q/queue/sqlite"
 )
 
 type DefaultTenantManager struct{}
@@ -32,35 +26,27 @@ func NewDefaultTenantManager() models.TenantManager {
 func Run(tm models.TenantManager, queue models.Queue) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	dashboardServer := dashboard.NewDashboard(queue, tm)
-	go func() {
-		dashboardServer.Start()
-	}()
+	var runTester bool
+	var numSenders, numReceivers, numMessagesPerGoroutine int
 
-	sqsServer := sqs.NewSQS(queue, tm)
-	go func() {
-		sqsServer.Start()
-	}()
+	flag.BoolVar(&runTester, "tester", false, "Run in test mode")
 
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(":2112", nil)
-	}()
+	flag.IntVar(&numSenders, "senders", 0, "Number of send goroutines")
+	flag.IntVar(&numMessagesPerGoroutine, "messages", 1, "Number of messages to send per goroutine")
+	flag.IntVar(&numReceivers, "receivers", 0, "Number of receive goroutines")
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	flag.Parse()
 
-	<-c // This blocks the main thread until an interrupt is received
-	fmt.Println("Gracefully shutting down...")
-
-	dashboardServer.Stop()
-	sqsServer.Stop()
-	queue.Shutdown()
+	if runTester {
+		tester.Run(numSenders, numReceivers, numMessagesPerGoroutine)
+	} else {
+		smoothmq.Run(tm, queue)
+	}
 }
 
 func main() {
 	tenantManager := NewDefaultTenantManager()
-	// queue := sqlite.NewSQLiteQueue()
-	queue := pebble.NewPebbleQueue()
+	queue := sqlite.NewSQLiteQueue()
+
 	Run(tenantManager, queue)
 }

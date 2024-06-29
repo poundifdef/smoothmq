@@ -43,10 +43,10 @@ var queueMessageCount = promauto.NewGaugeVec(
 )
 
 func NewSQLiteQueue() *SQLiteQueue {
-	fd, _ = os.Create("q.txt")
+	// fd, _ = os.Create("q.txt")
 
-	filename := "/data/queue.db"
-	// filename := "q624.db"
+	// filename := "/data/queue.sqlite"
+	filename := "q.sqlite"
 
 	snow, err := snowflake.NewNode(1)
 	if err != nil {
@@ -58,15 +58,15 @@ func NewSQLiteQueue() *SQLiteQueue {
 		newDb = true
 	}
 
-	db, err := sqlx.Open("sqlite3", filename)
+	db, err := sqlx.Open("sqlite3", filename+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// _, err = db.Exec("PRAGMA foreign_keys = ON")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	if newDb {
 		tx, err := db.Begin()
@@ -79,7 +79,7 @@ func NewSQLiteQueue() *SQLiteQueue {
 		tx.Exec(`
 		CREATE TABLE messages 
 		(
-			id integer primary key AUTOINCREMENT ,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
+			id integer primary key ,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
 			FOREIGN KEY(queue_id) REFERENCES queues(id) ON DELETE CASCADE
 		)
 		`)
@@ -92,7 +92,8 @@ func NewSQLiteQueue() *SQLiteQueue {
 		`)
 		tx.Exec("CREATE UNIQUE INDEX idx_queues on queues (tenant_id,name);")
 		tx.Exec("CREATE INDEX idx_messages on messages (tenant_id, queue_id, status, deliver_at, updated_at);")
-		tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,k, v);")
+		tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,message_id);")
+		// tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,k, v);")
 
 		tx.Commit()
 	}
@@ -209,16 +210,17 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 
 	queueId, err := q.queueId(tenantId, queue)
 	if err != nil {
-		err = q.CreateQueue(tenantId, queue)
-		if err != nil {
-			return 0, err
-		}
+		return 0, err
+		// err = q.CreateQueue(tenantId, queue)
+		// if err != nil {
+		// 	return 0, err
+		// }
 
-		queueId, err = q.queueId(tenantId, queue)
-		if err != nil {
-			return 0, err
+		// queueId, err = q.queueId(tenantId, queue)
+		// if err != nil {
+		// 	return 0, err
 
-		}
+		// }
 	}
 
 	now := time.Now().UTC().Unix()
@@ -473,6 +475,8 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 }
 
 func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) error {
+	// return nil
+
 	queueId, err := q.queueId(tenantId, queue)
 	if err != nil {
 		return err
@@ -481,11 +485,16 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	tx, err := q.db.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	query := `
 	DELETE FROM messages
 	WHERE tenant_id = ? AND queue_id = ? AND id = ?
 	`
-	result, err := q.db.Exec(
+	result, err := tx.Exec(
 		query,
 		tenantId,
 		queueId,
@@ -505,7 +514,24 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 		return nil
 	}
 
-	return nil
+	query = `
+	DELETE FROM kv
+	WHERE tenant_id = ? AND queue_id = ? AND message_id = ?
+	`
+	_, err = tx.Exec(
+		query,
+		tenantId,
+		queueId,
+		messageId,
+	)
+	if err != nil {
+		log.Println(err)
+		// return err
+	}
+
+	err = tx.Commit()
+
+	return err
 }
 
 func (q *SQLiteQueue) Shutdown() error {

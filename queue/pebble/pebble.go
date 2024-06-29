@@ -30,21 +30,6 @@ type PebbleQueue struct {
 	// dequeued *roaring64.Bitmap
 }
 
-// var queueDiskSize = promauto.NewGauge(
-// 	prometheus.GaugeOpts{
-// 		Name: "queue_disk_size",
-// 		Help: "Size of queue data on disk",
-// 	},
-// )
-
-// var queueMessageCount = promauto.NewGaugeVec(
-// 	prometheus.GaugeOpts{
-// 		Name: "queue_message_count",
-// 		Help: "Number of messages in queue",
-// 	},
-// 	[]string{"tenant_id", "queue", "status"},
-// )
-
 type MessageStatus byte
 
 const (
@@ -53,7 +38,7 @@ const (
 	MessageQueued MessageStatus = 1
 	MessageDequed MessageStatus = 2
 
-	MaxReadyQueueMessages uint64 = 5
+	MaxReadyQueueMessages uint64 = 1
 )
 
 func NewPebbleQueue() *PebbleQueue {
@@ -87,98 +72,9 @@ func NewPebbleQueue() *PebbleQueue {
 				rc.printQueueStats()
 				rc.fillReadyQueue()
 				// rc.markDequeued()
-
-				// 	rc.mu.Lock()
-				// 	// log.Println("queued size", rc.queued.GetSizeInBytes(), rc.queued.GetCardinality())
-				// 	// log.Println("dequeued size", rc.dequeued.GetSizeInBytes(), rc.dequeued.GetCardinality())
-
-				// 	// log.Println(rc.queued.Maximum())
-				// 	// should it be 0? instead, if it is less than maxcapacity
-				// 	if rc.queued.GetCardinality() < MaxReadyQueueMessages {
-				// 		// 	// get max from bitmap
-				// 		var maxQueued uint64 = 0
-				// 		var maxDequeued uint64 = 0
-
-				// 		if !rc.queued.IsEmpty() {
-				// 			maxQueued = rc.queued.Maximum()
-				// 		}
-				// 		if !rc.dequeued.IsEmpty() {
-				// 			maxDequeued = rc.dequeued.Maximum()
-				// 		}
-
-				// 		maxItem := max(maxQueued, maxDequeued) + 1
-
-				// 		maxQueuedBytes := make([]byte, 8)
-				// 		binary.BigEndian.PutUint64(maxQueuedBytes, maxItem)
-
-				// 		// 	// iterate over items, starting at max+1, up to 100k, and fill bitmap
-				// 		iter, err := db.NewIter(
-				// 			&pebble.IterOptions{
-				// 				UpperBound: []byte{1 << 7, 0, 0, 0, 0, 0, 0, 0},
-				// 				LowerBound: maxQueuedBytes,
-				// 			},
-				// 		)
-				// 		if err != nil {
-				// 			log.Println(err)
-				// 		}
-
-				// 		for iter.First(); iter.Valid(); iter.Next() {
-				// 			id := binary.BigEndian.Uint64(iter.Key())
-				// 			rc.queued.Add(id)
-
-				// 			if rc.queued.GetCardinality() >= MaxReadyQueueMessages {
-				// 				break
-				// 			}
-				// 		}
-				// 		iter.Close()
-				// 	}
-
-				// 	batch := db.NewBatch()
-				// 	iter := rc.dequeued.Iterator()
-
-				// 	toDelete := make([]byte, 8)
-				// 	for iter.HasNext() {
-				// 		id := iter.Next()
-				// 		binary.BigEndian.PutUint64(toDelete, id)
-				// 		val, closer, err := db.Get(toDelete)
-				// 		if err != nil {
-				// 			log.Println(err)
-				// 		}
-
-				// 		v := make([]byte, len(val))
-				// 		copy(v, val)
-
-				// 		k := make([]byte, len(toDelete))
-				// 		copy(k, toDelete)
-				// 		k[0] = k[0] | (1 << 7)
-				// 		batch.Set(k, v, pebble.Sync)
-
-				// 		batch.Delete(toDelete, pebble.Sync)
-				// 		closer.Close()
-				// 	}
-
-				// 	batch.Commit(pebble.Sync)
-				// 	batch.Close()
-
-				// 	rc.dequeued.Clear()
-				// 	rc.mu.Unlock()
-
 			}
 		}
 	}()
-
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case <-rc.ticker.C:
-	// 			// stat, err := os.Stat("q.txt")
-	// 			stat, err := os.Stat(rc.filename)
-	// 			if err == nil {
-	// 				queueDiskSize.Set(float64(stat.Size()))
-	// 			}
-	// 		}
-	// 	}
-	// }()
 
 	return rc
 }
@@ -204,6 +100,87 @@ func (q *PebbleQueue) printQueueStats() {
 
 }
 
+func (q *PebbleQueue) markDequeued() {
+	batch := q.db.NewIndexedBatch()
+	defer batch.Close()
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	for tenantId, queues := range q.dequeued {
+		for queue, messages := range queues {
+			iter := messages.Iterator()
+			for iter.HasNext() {
+				id := int64(iter.Next())
+				// log.Println(tenantId, queue, id)
+
+				msgKey := NewMetadataKey()
+				msgKey.TenantID = tenantId
+				msgKey.Queue = queue
+				msgKey.Status = 0
+				msgKey.Timestamp = 0
+				msgKey.MessageID = id
+
+				keyBytes, _ := msgKey.Bytes()
+
+				msgKeyUpper := NewMetadataKey()
+				msgKeyUpper.TenantID = tenantId
+				msgKeyUpper.Queue = queue
+				// msgKeyUpper.Status = 0
+				msgKeyUpper.Status = 0xFF
+				msgKeyUpper.Timestamp = math.MaxInt64
+				msgKeyUpper.MessageID = id + 1
+
+				keyBytesUpper, _ := msgKeyUpper.Bytes()
+
+				// zl.Debug().Hex("l", keyBytes).Send()
+				// zl.Debug().Hex("u", keyBytesUpper).Send()
+				log.Println(msgKey)
+				log.Println(msgKeyUpper)
+
+				msgIter, err := q.db.NewIter(
+					&pebble.IterOptions{
+						LowerBound: keyBytes,
+						UpperBound: keyBytesUpper,
+					},
+				)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+
+				for msgIter.First(); msgIter.Valid(); msgIter.Next() {
+					mkey := NewMetadataKey()
+					mkey.Fill(msgIter.Key())
+					log.Println(mkey)
+
+					log.Println(batch.Delete(msgIter.Key(), pebble.Sync))
+					mkey.Status = byte(MessageDequed)
+					newKey, _ := mkey.Bytes()
+
+					// log.Println(msgIter.Key())
+					// log.Println(newKey)
+					log.Println(batch.Set(newKey, nil, pebble.Sync))
+				}
+
+				msgIter.Close()
+
+			}
+
+			messages.Clear()
+		}
+	}
+
+	batch.Commit(pebble.Sync)
+
+	// for _, queues := range q.dequeued {
+	// 	for _, messages := range queues {
+	// 		messages.Clear()
+	// 	}
+	// }
+
+}
+
 func (q *PebbleQueue) fillReadyQueue() {
 
 	queueKeyLower := NewQueueKey()
@@ -216,8 +193,6 @@ func (q *PebbleQueue) fillReadyQueue() {
 	iter, err := q.db.NewIter(&pebble.IterOptions{
 		LowerBound: queueKeyLowerBytes,
 		UpperBound: queueKeyUpperBytes,
-		// LowerBound: []byte{byte(KV_QUEUE)},
-		// UpperBound: []byte{byte(KV_QUEUE + 1)},
 	})
 	if err != nil {
 		log.Println(err)
@@ -272,7 +247,7 @@ func (q *PebbleQueue) fillReadyQueue() {
 				maxDequeued = dequeued.Maximum()
 			}
 
-			// log.Println(maxQueued, maxDequeued)
+			log.Println(maxQueued, maxDequeued)
 
 			maxItem := max(maxQueued, maxDequeued) + 1
 			// log.Println(maxItem)
@@ -280,9 +255,9 @@ func (q *PebbleQueue) fillReadyQueue() {
 			lowerBound := NewMetadataKey()
 			lowerBound.TenantID = queueKey.TenantID
 			lowerBound.Queue = queueKey.Queue
-			lowerBound.MessageID = int64(maxItem)
-			lowerBound.Timestamp = 0
 			lowerBound.Status = byte(MessageQueued)
+			lowerBound.Timestamp = 0
+			lowerBound.MessageID = int64(maxItem)
 
 			lowerBoundBytes, _ := lowerBound.Bytes()
 			// log.Println(lowerBoundBytes)
@@ -292,10 +267,12 @@ func (q *PebbleQueue) fillReadyQueue() {
 			upperBound := NewMetadataKey()
 			upperBound.TenantID = queueKey.TenantID
 			upperBound.Queue = queueKey.Queue
-			upperBound.MessageID = math.MaxInt64
+			upperBound.Status = byte(MessageQueued)
 			upperBound.Timestamp = now()
-			upperBound.Type += 1
+			upperBound.MessageID = math.MaxInt64
 
+			log.Println(lowerBound)
+			log.Println(upperBound)
 			upperBoundBytes, _ := upperBound.Bytes()
 
 			// zl.Debug().Interface("lower", lowerBound).Interface("upper", upperBound).Send()
@@ -320,6 +297,7 @@ func (q *PebbleQueue) fillReadyQueue() {
 				// log.Println(msgIter.Key())
 				msgMeta := NewMetadataKey()
 				msgMeta.Fill(msgIter.Key())
+				log.Println(msgMeta)
 				// log.Println(msgMeta.MessageID, msgMeta.Status)
 				// // // _, _, id, _, _ := KeyToMetadata(iter.Key())
 				// log.Println(lowerBound.MessageID)
@@ -511,7 +489,7 @@ func (q *PebbleQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 
 	// k := make([]byte, 8)
 	for _, msgId := range msgIds {
-		log.Println(msgId)
+		// log.Println(msgId)
 		msgKey := NewMessageKey()
 		msgKey.TenantID = tenantId
 		msgKey.Queue = queue
@@ -531,15 +509,15 @@ func (q *PebbleQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 		})
 		closer.Close()
 
-		log.Println(msgId)
-		log.Println(queued.Contains(msgId))
-		log.Println(dequeued.Contains(msgId))
+		// log.Println(msgId)
+		// log.Println(queued.Contains(msgId))
+		// log.Println(dequeued.Contains(msgId))
 
 		dequeued.Add(msgId)
 		queued.Remove(msgId)
 
-		log.Println(queued.Contains(msgId))
-		log.Println(dequeued.Contains(msgId))
+		// log.Println(queued.Contains(msgId))
+		// log.Println(dequeued.Contains(msgId))
 	}
 
 	return rc, nil
