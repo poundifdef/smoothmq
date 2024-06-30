@@ -44,7 +44,7 @@ type SQS struct {
 func NewSQS(queue models.Queue, tenantManager models.TenantManager) *SQS {
 	app := fiber.New(fiber.Config{})
 
-	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger()
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger().Level(zerolog.ErrorLevel)
 
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
 		Logger: &logger,
@@ -107,7 +107,7 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 
 	tenantId := c.Locals("tenantId").(int64)
 
-	log.Println(awsMethod)
+	// log.Println(awsMethod)
 
 	switch awsMethod {
 	case "AmazonSQS.SendMessage":

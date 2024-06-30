@@ -10,20 +10,38 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/bwmarrin/snowflake"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type SQLiteQueue struct {
-	Filename string
+	filename string
 	db       *sqlx.DB
 	mu       *sync.Mutex
 	snow     *snowflake.Node
+	ticker   *time.Ticker
 }
 
+var queueDiskSize = promauto.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "queue_disk_size",
+		Help: "Size of queue data on disk",
+	},
+)
+
+var queueMessageCount = promauto.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "queue_message_count",
+		Help: "Number of messages in queue",
+	},
+	[]string{"tenant_id", "queue", "status"},
+)
+
 func NewSQLiteQueue() *SQLiteQueue {
-	filename := "queue.db"
+	filename := "q.sqlite"
 
 	snow, err := snowflake.NewNode(1)
 	if err != nil {
@@ -35,12 +53,7 @@ func NewSQLiteQueue() *SQLiteQueue {
 		newDb = true
 	}
 
-	db, err := sqlx.Open("sqlite3", filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, err = db.Exec("PRAGMA foreign_keys = ON")
+	db, err := sqlx.Open("sqlite3", filename+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,11 +65,11 @@ func NewSQLiteQueue() *SQLiteQueue {
 		}
 
 		// TODO: check for errors
-		tx.Exec("CREATE TABLE queues (id integer primary key,name string, tenant_id integer)")
+		tx.Exec("CREATE TABLE queues (id integer primary key ,name string, tenant_id integer)")
 		tx.Exec(`
 		CREATE TABLE messages 
 		(
-			id integer primary key,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
+			id integer primary key ,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
 			FOREIGN KEY(queue_id) REFERENCES queues(id) ON DELETE CASCADE
 		)
 		`)
@@ -69,17 +82,33 @@ func NewSQLiteQueue() *SQLiteQueue {
 		`)
 		tx.Exec("CREATE UNIQUE INDEX idx_queues on queues (tenant_id,name);")
 		tx.Exec("CREATE INDEX idx_messages on messages (tenant_id, queue_id, status, deliver_at, updated_at);")
-		tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,k, v);")
+		tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,message_id);")
 
 		tx.Commit()
 	}
 
-	return &SQLiteQueue{
-		Filename: filename,
+	rc := &SQLiteQueue{
+		filename: filename,
 		db:       db,
 		mu:       &sync.Mutex{},
 		snow:     snow,
+		ticker:   time.NewTicker(1 * time.Second),
 	}
+
+	go func() {
+		for {
+			select {
+			case <-rc.ticker.C:
+				// stat, err := os.Stat("q.txt")
+				stat, err := os.Stat(rc.filename)
+				if err == nil {
+					queueDiskSize.Set(float64(stat.Size()))
+				}
+			}
+		}
+	}()
+
+	return rc
 }
 
 func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string) error {
@@ -88,7 +117,9 @@ func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string) error {
 
 	// TODO: validate, lowercase, trim queue names. ensure length and valid characters.
 
-	_, err := q.db.Exec("INSERT INTO queues (tenant_id,name) VALUES (?,?)", tenantId, strings.ToLower(queue))
+	qId := q.snow.Generate()
+
+	_, err := q.db.Exec("INSERT INTO queues (id,tenant_id,name) VALUES (?,?,?)", qId.Int64(), tenantId, strings.ToLower(queue))
 
 	return err
 }
@@ -112,6 +143,16 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 		return err
 	}
 
+	_, err = tx.Exec("DELETE FROM messages WHERE tenant_id = ? AND queue_id = ?", tenantId, queueId)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM kv WHERE tenant_id = ? AND queue_id = ?", tenantId, queueId)
+	if err != nil {
+		return err
+	}
+
 	_, err = tx.Exec("DELETE FROM queues WHERE tenant_id = ? AND id = ?", tenantId, queueId)
 	if err != nil {
 		return err
@@ -123,6 +164,7 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
 	rows, err := q.db.Query("SELECT name FROM queues WHERE tenant_id=?", tenantId)
 	if err != nil {
+		log.Println(err)
 		return nil, err
 	}
 
@@ -160,9 +202,6 @@ func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
 func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int, requeueIn int) (int64, error) {
 	// TODO: make some params configurable or a property of the queue
 
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
 	messageSnow := q.snow.Generate()
 	messageId := messageSnow.Int64()
 
@@ -174,6 +213,8 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 	now := time.Now().UTC().Unix()
 	deliverAt := now + int64(delay)
 
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	tx, err := q.db.Beginx()
 	if err != nil {
 		return 0, err
@@ -395,7 +436,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 		sql += " id IN (SELECT message_id FROM kv WHERE ("
 
 		for i := range len(filterCriteria.KV) {
-			sql += "(k=? AND v=?)"
+			sql += "(k=? AND v=? and tenant_id=? and queue_id=?)"
 
 			if i < len(filterCriteria.KV)-1 {
 				sql += " OR "
@@ -408,7 +449,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 	}
 
 	for k, v := range filterCriteria.KV {
-		args = append(args, k, v)
+		args = append(args, k, v, tenantId, queueId)
 	}
 
 	args = append(args, len(filterCriteria.KV))
@@ -429,11 +470,16 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	tx, err := q.db.Begin()
+	if err != nil {
+		return err
+	}
+
 	query := `
 	DELETE FROM messages
 	WHERE tenant_id = ? AND queue_id = ? AND id = ?
 	`
-	result, err := q.db.Exec(
+	result, err := tx.Exec(
 		query,
 		tenantId,
 		queueId,
@@ -453,7 +499,24 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 		return nil
 	}
 
-	return nil
+	query = `
+	DELETE FROM kv
+	WHERE tenant_id = ? AND queue_id = ? AND message_id = ?
+	`
+	_, err = tx.Exec(
+		query,
+		tenantId,
+		queueId,
+		messageId,
+	)
+	if err != nil {
+		log.Println(err)
+		// return err
+	}
+
+	err = tx.Commit()
+
+	return err
 }
 
 func (q *SQLiteQueue) Shutdown() error {

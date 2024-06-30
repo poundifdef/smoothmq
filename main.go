@@ -1,15 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"flag"
 	"log"
-	"os"
-	"os/signal"
-	"q/dashboard"
+	"q/cmd/smoothmq"
+	"q/cmd/tester"
 	"q/models"
-	"q/protocols/sqs"
 	"q/queue/sqlite"
-	"syscall"
 )
 
 type DefaultTenantManager struct{}
@@ -29,29 +26,29 @@ func NewDefaultTenantManager() models.TenantManager {
 func Run(tm models.TenantManager, queue models.Queue) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	dashboardServer := dashboard.NewDashboard(queue, tm)
-	go func() {
-		dashboardServer.Start()
-	}()
+	var runTester bool
+	var numSenders, numReceivers, numMessagesPerGoroutine int
+	var endpoint string
 
-	sqsServer := sqs.NewSQS(queue, tm)
-	go func() {
-		sqsServer.Start()
-	}()
+	flag.BoolVar(&runTester, "tester", false, "Run in test mode")
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	flag.IntVar(&numSenders, "senders", 0, "Number of send goroutines")
+	flag.IntVar(&numMessagesPerGoroutine, "messages", 1, "Number of messages to send per goroutine")
+	flag.IntVar(&numReceivers, "receivers", 0, "Number of receive goroutines")
+	flag.StringVar(&endpoint, "endpoint", "http://localhost:3001", "SQS endpoint for testing")
 
-	<-c // This blocks the main thread until an interrupt is received
-	fmt.Println("Gracefully shutting down...")
+	flag.Parse()
 
-	dashboardServer.Stop()
-	sqsServer.Stop()
-	queue.Shutdown()
+	if runTester {
+		tester.Run(numSenders, numReceivers, numMessagesPerGoroutine, endpoint)
+	} else {
+		smoothmq.Run(tm, queue)
+	}
 }
 
 func main() {
 	tenantManager := NewDefaultTenantManager()
 	queue := sqlite.NewSQLiteQueue()
+
 	Run(tenantManager, queue)
 }
