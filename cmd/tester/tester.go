@@ -19,10 +19,8 @@ import (
 func Run(numSenders, numReceivers, numMessagesPerGoroutine int) {
 
 	BaseEndpoint := "https://smoothmq-sqs.fly.dev"
-	// BaseEndpoint := "http://localhost:3001"
 
 	var sentMessages, receivedMessages int
-	// var queueUrl string = "http://a.b/1/a"
 
 	// Hardcoded AWS credentials
 	awsAccessKeyID := "YOUR_ACCESS_KEY_ID"
@@ -76,10 +74,6 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int) {
 			}
 			log.Printf("sent: %d, received: %d, pct: %f\n", sentMessages, receivedMessages, pct)
 			time.Sleep(1 * time.Second)
-
-			// if sentMessages == (numSenders * numMessagesPerGoroutine) {
-			// 	break
-			// }
 		}
 	}()
 
@@ -122,64 +116,15 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID int
 		},
 	}
 	_, err := client.SendMessage(context.TODO(), input)
-	// log.Println(err)
-
-	/*
-	   distributed
-	   - delete needs to route
-	   - peek needs to route
-	   - stats needs to route
-	   - search needs to route
-	*/
-
-	// i2 := &sqs.ReceiveMessageInput{
-	// 	QueueUrl:            aws.String(queueUrl),
-	// 	MaxNumberOfMessages: 10,
-	// 	MessageAttributeNames: []string{
-	// 		"All",
-	// 	},
-	// }
-	// msgs, err := client.ReceiveMessage(context.TODO(), i2)
-	// log.Println(err)
-	// // log.Println(msgs)
-
-	// for _, msg := range msgs.Messages {
-	// 	log.Println(*msg.Body)
-	// 	// log.Println(msg.MessageAttributes)
-	// 	delInput := &sqs.DeleteMessageInput{
-	// 		QueueUrl:      aws.String(queueUrl),
-	// 		ReceiptHandle: msg.ReceiptHandle,
-	// 		// ReceiptHandle: msg
-
-	// 	}
-	// 	_, delerr := client.DeleteMessage(context.TODO(), delInput)
-	// 	if delerr != nil {
-	// 		log.Printf("Failed to delete message from goroutine %d, request %d: %v", goroutineID, msg.ReceiptHandle, delerr)
-	// 	}
-	// }
 
 	if err != nil {
 		log.Printf("Failed to send message from goroutine %d, request %d: %v", goroutineID, requestID, err)
-	} else {
-		// log.Printf("Successfully sent message from goroutine %d, request %d", goroutineID, requestID)
 	}
 
-	// Adding sleep to avoid hitting rate limits in a real-world scenario
 	// time.Sleep(100 * time.Millisecond)
 }
 
 func receiveMessage(client *sqs.Client, queueUrl string, goroutineID int) int {
-
-	// log.Println(err)
-
-	/*
-	   distributed
-	   - delete needs to route
-	   - peek needs to route
-	   - stats needs to route
-	   - search needs to route
-	*/
-
 	i := &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(queueUrl),
 		MaxNumberOfMessages: 1,
@@ -191,37 +136,19 @@ func receiveMessage(client *sqs.Client, queueUrl string, goroutineID int) int {
 	if err != nil {
 		log.Println(err)
 	}
-	// // log.Println(msgs)
-
-	// if len(msgs.Messages) == 0 {
-	// 	return 0
-	// }
-
-	// log.Printf("Received %d messages thread %d\n", len(msgs.Messages), goroutineID)
 
 	for _, msg := range msgs.Messages {
-		// log.Println(*msg.MessageId)
-		// log.Println(*msg.Body)
-		// log.Println(msg.MessageAttributes)
 		delInput := &sqs.DeleteMessageInput{
 			QueueUrl:      aws.String(queueUrl),
 			ReceiptHandle: msg.ReceiptHandle,
-			// ReceiptHandle: msg
-
 		}
 		_, delerr := client.DeleteMessage(context.TODO(), delInput)
 		if delerr != nil {
 			log.Printf("Failed to delete message from goroutine %d, request %d: %v", goroutineID, msg.ReceiptHandle, delerr)
 		}
-
-		// log.Println(*msg.MessageId, *msg.Body)
-		// log.Println(*msg.MessageId)
-
-		// log.Printf("Deleted messages thread %d\n", goroutineID)
 	}
 
 	// time.Sleep(1 * time.Second)
 	return len(msgs.Messages)
 
-	// Adding sleep to avoid hitting rate limits in a real-world scenario
 }
