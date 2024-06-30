@@ -65,7 +65,7 @@ func NewSQLiteQueue() *SQLiteQueue {
 		}
 
 		// TODO: check for errors
-		tx.Exec("CREATE TABLE queues (id integer primary key AUTOINCREMENT,name string, tenant_id integer)")
+		tx.Exec("CREATE TABLE queues (id integer primary key ,name string, tenant_id integer)")
 		tx.Exec(`
 		CREATE TABLE messages 
 		(
@@ -117,7 +117,9 @@ func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string) error {
 
 	// TODO: validate, lowercase, trim queue names. ensure length and valid characters.
 
-	_, err := q.db.Exec("INSERT INTO queues (tenant_id,name) VALUES (?,?)", tenantId, strings.ToLower(queue))
+	qId := q.snow.Generate()
+
+	_, err := q.db.Exec("INSERT INTO queues (id,tenant_id,name) VALUES (?,?,?)", qId.Int64(), tenantId, strings.ToLower(queue))
 
 	return err
 }
@@ -162,6 +164,7 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
 	rows, err := q.db.Query("SELECT name FROM queues WHERE tenant_id=?", tenantId)
 	if err != nil {
+		log.Println(err)
 		return nil, err
 	}
 

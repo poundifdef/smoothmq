@@ -16,9 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
-func Run(numSenders, numReceivers, numMessagesPerGoroutine int) {
+func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string) {
 
-	BaseEndpoint := "https://smoothmq-sqs.fly.dev"
+	// BaseEndpoint := "https://smoothmq-sqs.fly.dev"
 
 	var sentMessages, receivedMessages int
 
@@ -33,7 +33,7 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int) {
 		config.WithRegion("us-east-1"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, "")),
 	)
-	cfg.BaseEndpoint = &BaseEndpoint
+	cfg.BaseEndpoint = &endpoint
 	if err != nil {
 		log.Fatalf("unable to load SDK config, %v", err)
 	}
