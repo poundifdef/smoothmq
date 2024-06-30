@@ -449,7 +449,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 		sql += " id IN (SELECT message_id FROM kv WHERE ("
 
 		for i := range len(filterCriteria.KV) {
-			sql += "(k=? AND v=?)"
+			sql += "(k=? AND v=? and tenant_id=? and queue_id=?)"
 
 			if i < len(filterCriteria.KV)-1 {
 				sql += " OR "
@@ -462,7 +462,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 	}
 
 	for k, v := range filterCriteria.KV {
-		args = append(args, k, v)
+		args = append(args, k, v, tenantId, queueId)
 	}
 
 	args = append(args, len(filterCriteria.KV))
