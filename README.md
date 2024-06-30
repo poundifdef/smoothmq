@@ -2,7 +2,7 @@
 
 SmoothMQ is a drop-in replacement for SQS with a much smoother developer experience.
 It has a functional UI, observability, tracing, message scheduling, and rate-limiting.
-SmoothMQ lets you run a private SQS intance on any cloud.
+SmoothMQ lets you run a private SQS instance on any cloud.
 
 <!-- A drop-in replacement for SQS designed for great developer experience and efficiency. -->
 
