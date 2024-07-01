@@ -135,11 +135,12 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 		return err
 	}
 
+	defer tx.Rollback()
+
 	var queueId int64
 	row := tx.QueryRow("select id from queues where name = ? and tenant_id = ?", strings.ToLower(queue), tenantId)
 	err = row.Scan(&queueId)
 	if err != nil {
-		tx.Rollback()
 		return err
 	}
 
