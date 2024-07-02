@@ -2,26 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"q/cmd/smoothmq"
 	"q/cmd/tester"
 	"q/models"
 	"q/queue/sqlite"
+	"q/tenants/defaultmanager"
 )
-
-type DefaultTenantManager struct{}
-
-func (tm *DefaultTenantManager) GetTenant() int64 {
-	return 1
-}
-
-func (tm *DefaultTenantManager) GetAWSSecretKey(accessKey string, region string) (int64, string, error) {
-	return int64(1), "YOUR_SECRET_ACCESS_KEY", nil
-}
-
-func NewDefaultTenantManager() models.TenantManager {
-	return &DefaultTenantManager{}
-}
 
 func Run(tm models.TenantManager, queue models.Queue) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -39,6 +27,8 @@ func Run(tm models.TenantManager, queue models.Queue) {
 
 	flag.Parse()
 
+	fmt.Println()
+
 	if runTester {
 		tester.Run(numSenders, numReceivers, numMessagesPerGoroutine, endpoint)
 	} else {
@@ -47,7 +37,7 @@ func Run(tm models.TenantManager, queue models.Queue) {
 }
 
 func main() {
-	tenantManager := NewDefaultTenantManager()
+	tenantManager := defaultmanager.NewDefaultTenantManager()
 	queue := sqlite.NewSQLiteQueue()
 
 	Run(tenantManager, queue)
