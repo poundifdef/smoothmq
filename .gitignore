@@ -28,3 +28,6 @@ scratch/
 
 *.sqlite
 *.db
+.aider*
+!.aider.conf.yml
+!.aiderignore

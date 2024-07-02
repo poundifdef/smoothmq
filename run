@@ -1,0 +1,15 @@
+#!/bin/bash
+
+./dev
+
+status=$?  # Save the exit status of ./dev
+
+if [ $status -eq 1 ]; then
+    echo "Error: ./dev returned 1, exiting."
+    exit 1  # Exit script with status 1
+fi
+
+# trap ctrl-c so that it doesn't stop the container launched in ./dev
+echo "Container running, press ENTER to exit."
+read -n 1 -s -r -p ""  # Wait for user to press a key
+docker-compose down >/dev/null 2>&1 &  # shut down the container in the background.
