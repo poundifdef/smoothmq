@@ -3,6 +3,7 @@ package dashboard
 import (
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -32,10 +33,11 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager) *Dashb
 	engine := html.NewFileSystem(http.FS(fs2), ".html")
 	// engine := html.New("./dashboard/views", ".html")
 	// engine.Reload(true)
-	engine.Debug(true)
+	// engine.Debug(true)
 
 	app := fiber.New(fiber.Config{
-		Views: engine,
+		Views:                 engine,
+		DisableStartupMessage: true,
 	})
 
 	d := &Dashboard{
@@ -54,6 +56,7 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager) *Dashb
 }
 
 func (d *Dashboard) Start() error {
+	fmt.Println("Dashboard: http://localhost:3000")
 	return d.app.Listen(":3000")
 }
 

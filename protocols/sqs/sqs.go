@@ -42,7 +42,7 @@ type SQS struct {
 }
 
 func NewSQS(queue models.Queue, tenantManager models.TenantManager) *SQS {
-	app := fiber.New(fiber.Config{})
+	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger().Level(zerolog.ErrorLevel)
 
@@ -88,6 +88,7 @@ func (s *SQS) authMiddleware(c *fiber.Ctx) error {
 }
 
 func (s *SQS) Start() error {
+	fmt.Println("SQS Endpoint: http://localhost:3001")
 	return s.app.Listen(":3001")
 }
 
