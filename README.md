@@ -6,6 +6,16 @@ SmoothMQ lets you run a private SQS instance on any cloud.
 
 <!-- A drop-in replacement for SQS designed for great developer experience and efficiency. -->
 
+## Quick Start
+
+Clone the repo and then invoke:
+
+```bash
+docker compose up
+```
+
+When you are finished, ctrl-c and then `docker compose down`.
+
 ## Getting Started
 
 SmoothMQ deploys as a single go binary and can be used by any existing SQS client.
