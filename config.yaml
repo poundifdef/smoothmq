@@ -1,0 +1,25 @@
+---
+server:
+  sqs:
+    enabled: true
+    port: 3001
+
+  dashboard:
+    enabled: true
+    port: 3000
+
+aws:
+  ar: [1,2]
+  a:
+    b:
+      c: d
+    e: f
+
+  port: 1
+
+  keys:
+    - k: a
+      v: b
+
+    - k: c
+      v: d

@@ -15,7 +15,7 @@ SmoothMQ deploys as a single go binary and can be used by any existing SQS clien
 This will run a UI on `:3000` and an SQS-compatible server on `:3001`.
 
 ```
-$ go run . queue
+$ go run . server
 ```
 
 ## Connecting

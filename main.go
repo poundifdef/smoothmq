@@ -1,28 +1,44 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"q/cmd/smoothmq"
+	"q/cmd/tester"
 	"q/config"
+	"q/models"
+	"q/queue/sqlite"
+	"q/tenants/defaultmanager"
+
+	_ "embed"
+
+	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/rawbytes"
+	"github.com/knadh/koanf/v2"
 )
 
-// func Run(command string, config *config.CLI, tenantManager models.TenantManager, queue models.Queue) {
-// 	if tenantManager == nil {
-// 		tenantManager = defaultmanager.NewDefaultTenantManager()
-// 	}
+//go:embed config.yaml
+var configData []byte
 
-// 	if queue == nil {
-// 		queue = sqlite.NewSQLiteQueue()
-// 	}
+func Run(command string, cli *config.CLI, cfg *config.Config, tenantManager models.TenantManager, queue models.Queue) {
+	if tenantManager == nil {
+		tenantManager = defaultmanager.NewDefaultTenantManager()
+	}
 
-// 	fmt.Println()
+	if queue == nil {
+		queue = sqlite.NewSQLiteQueue()
+	}
 
-// 	switch command {
-// 	case "tester":
-// 		tester.Run(config.Tester.Senders, config.Tester.Receivers, config.Tester.Messages, config.Tester.SqsEndpoint)
-// 	default:
-// 		smoothmq.Run(tenantManager, queue, config.Queue)
-// 	}
-// }
+	fmt.Println()
+
+	switch command {
+	case "tester":
+		tester.Run(cli.Tester.Senders, cli.Tester.Receivers, cli.Tester.Messages, cli.Tester.SqsEndpoint)
+	default:
+		smoothmq.Run(tenantManager, queue, cfg.Server)
+	}
+}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -32,7 +48,26 @@ func main() {
 		panic(err)
 	}
 
-	return
+	k := koanf.New(".")
+	cfg := &config.Config{}
+	parser := yaml.Parser()
+	var provider koanf.Provider
 
-	// Run(command, config, nil, nil)
+	if cli.ConfigFile != "" {
+		provider = file.Provider(cli.ConfigFile)
+	} else {
+		provider = rawbytes.Provider(configData)
+	}
+
+	err = k.Load(provider, parser)
+	if err != nil {
+		panic(err)
+	}
+
+	err = k.Unmarshal("", cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	Run(command, cli, cfg, nil, nil)
 }
