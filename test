@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -e
-./dev
+
 
 # Function to tear down the container
 tear_down() {
@@ -9,28 +9,42 @@ tear_down() {
     docker-compose down >/dev/null 2>&1 &  # shut down the container in the background
 }
 
+# (cd tests/py && python test.py)
+run_pytests() {
+    # in a scope, cd to tests/py and execute python test.py
+    (cd tests/py && . ./activate.sh && python test.py)
+    test_exit_code=$?
+    if [ $test_exit_code -ne 0 ]; then
+        echo "Test failed with exit code $test_exit_code."
+        exit $test_exit_code
+    fi
+}
+
+
+run_jstests() {
+    # in a scope, cd to tests/js and execute npm install and npm test
+    (cd tests/js && npm install && npm test)
+    test_exit_code=$?
+    if [ $test_exit_code -ne 0 ]; then
+        echo "Test failed with exit code $test_exit_code."
+        exit $test_exit_code
+    fi
+}
+
+# BEGIN EXECUTION OF SCRIPT
+
+./dev
+
 # Set up trap to ensure tear_down is called on exit
 trap tear_down EXIT
 
-# in a scope, cd to tests/py and execute python test.py
-(cd tests/py && python test.py)
-test_exit_code=$?
-if [ $test_exit_code -ne 0 ]; then
-    echo "Test failed with exit code $test_exit_code."
-    exit $test_exit_code
-fi
+run_pytests
 
 # if --full in command args then cd to tests/js and execute npm install and npm test
 # they are disabled by default because the js tests are still failing.
 if [[ "$@" == *"--full"* ]]; then
     echo "Running JS tests"
+    run_jstests
 else
     exit 0
-fi
-
-(cd tests/js && npm install && npm test)
-test_exit_code=$?
-if [ $test_exit_code -ne 0 ]; then
-    echo "Test failed with exit code $test_exit_code."
-    exit $test_exit_code
 fi

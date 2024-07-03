@@ -1,2 +1,2 @@
-dotenv
+python-dotenv
 boto3

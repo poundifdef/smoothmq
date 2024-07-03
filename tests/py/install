@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# create a venv
+# if windows use python, else python3
+if command -v python3 &>/dev/null; then
+    PYTHON_CMD=python3
+    PIP_CMD=pip3
+elif command -v python &>/dev/null; then
+    PYTHON_CMD=python
+    PIP_CMD=pip
+else
+    echo "Neither python nor python3 is available. Exiting."
+    exit 1
+fi
+
+$PYTHON_CMD -m venv venv
+# if windows use venv/Scripts/activate, else venv/bin/activate
+if [[ "$OSTYPE" == "msys" ]]; then
+    source venv/Scripts/activate
+else
+    source venv/bin/activate
+fi
+
+# use PEP 517
+pip install -r requirements.txt --use-pep517
