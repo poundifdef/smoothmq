@@ -6,6 +6,12 @@ SmoothMQ lets you run a private SQS instance on any cloud.
 
 <!-- A drop-in replacement for SQS designed for great developer experience and efficiency. -->
 
+## Login Credentials
+
+The environmental variables `USER` and `PASS` are used to store http credentials.
+
+The dashboard is located at `/` which forwards internally to port 3000 and the api is located at `/api` which forwards to port 3001.
+
 ## Quick Start
 
 Clone the repo and then invoke:
