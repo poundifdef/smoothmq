@@ -2,12 +2,38 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [],
+            "debugOptions": [
+                "RedirectOutput"
+            ]
+        },
+        {
             "type": "node",
             "request": "launch",
             "name": "Launch JS Test",
-            "program": "${workspaceFolder}/tests/js/test.js",
+            "program": "${file}",
             "cwd": "${workspaceFolder}/tests/js",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "args": [],
+            "env": {},
+            "envFile": "${workspaceFolder}/.env",
+            "skipFiles": [
+                "<node_internals>/**",
+                "${workspaceFolder}/test/py/**"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/tests/js/**/*.js"
+            ]
         }
     ]
 }

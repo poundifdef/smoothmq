@@ -3,6 +3,7 @@ import time
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+import requests
 
 HERE = Path(__file__).parent
 PROJECT_ROOT = HERE.parent.parent
@@ -68,6 +69,14 @@ def main() -> None:
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
     endpoints = ["http://localhost", "https://jobs.kumquat.live"]
     for endpoint_url in endpoints:
+        # check to see that the endpoint is reachable within 2 seconds. The endpoint will be /ui
+        try:
+            response = requests.get(endpoint_url + "/ui", timeout=2)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"\nError: {e}")
+            print(f"\nCould not reach endpoint: {endpoint_url}")
+            continue
         print(f"\nTesting with endpoint: {endpoint_url}")
         run_sqs_test(endpoint_url=endpoint_url, aws_secret_acess_key=aws_secret_access_key)
 
