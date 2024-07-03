@@ -23,7 +23,9 @@ RUN apt-get update && \
     dos2unix \
     apache2-utils \
     procps \
-    bash && \
+    bash \
+    sudo \
+    curl && \
     apt-get clean
 
 COPY --from=builder /run-app /usr/local/bin/
