@@ -5,6 +5,8 @@ WORKDIR /usr/src/app
 COPY sqs/go.mod sqs/go.sum ./
 RUN go mod download && go mod verify
 
+
+
 # Copy and compile individual packages
 COPY sqs/models models
 RUN go build -v ./models
@@ -70,4 +72,5 @@ EXPOSE 3001
 
 ENV PORT=80
 
+COPY .env /etc/.env
 CMD ["/bin/sh", "/entrypoint.sh"]
