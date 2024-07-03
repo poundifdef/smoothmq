@@ -43,4 +43,8 @@ try:
     time.sleep(2)
 
 finally:
-    print("done")
+
+    print(f"Destroying queue: {queue_url}")
+    sqs.delete_queue(QueueUrl=queue_url)
+    print(f"Destroyed queue: {queue_url}")
+
