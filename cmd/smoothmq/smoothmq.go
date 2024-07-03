@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"q/config"
 	"q/dashboard"
 	"q/models"
 	"q/protocols/sqs"
@@ -13,13 +14,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func Run(tm models.TenantManager, queue models.Queue) {
-	dashboardServer := dashboard.NewDashboard(queue, tm)
+func Run(tm models.TenantManager, queue models.Queue, cfg config.QueueConfig) {
+	dashboardServer := dashboard.NewDashboard(queue, tm, cfg.Dashboard)
 	go func() {
 		dashboardServer.Start()
 	}()
 
-	sqsServer := sqs.NewSQS(queue, tm)
+	sqsServer := sqs.NewSQS(queue, tm, cfg.SQS)
 	go func() {
 		sqsServer.Start()
 	}()
