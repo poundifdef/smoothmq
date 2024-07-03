@@ -25,6 +25,9 @@ scratch/
 
 venv/
 
+# remove node_modules
+**/node_modules
+
 *.sqlite
 *.db
 .aider*

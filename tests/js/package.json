@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "aws-sdk": "^2.1654.0",
+    "dotenv": "^16.4.5",
+    "util": "^0.12.5"
+  },
+  "scripts": {
+    "test": "node test.js"
+  }
+}

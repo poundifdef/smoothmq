@@ -2,6 +2,13 @@ import boto3
 import time
 import os
 from dotenv import load_dotenv
+from pathlib import Path
+
+HERE = Path(__file__).parent
+PROJECT_ROOT = HERE.parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
+
+load_dotenv(dotenv_path=ENV_FILE)
 
 def create_or_get_queue(sqs, queue_name: str) -> tuple[str, bool]:
     response = sqs.list_queues(QueueNamePrefix=queue_name)
@@ -17,7 +24,7 @@ def create_or_get_queue(sqs, queue_name: str) -> tuple[str, bool]:
 
 def run_sqs_test(endpoint_url: str, aws_secret_acess_key: str) -> None:
     # Load environment variables from .env file
-    load_dotenv()
+
 
     # Configure the SQS client
     sqs = boto3.client("sqs", 
