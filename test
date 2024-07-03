@@ -19,3 +19,18 @@ if [ $test_exit_code -ne 0 ]; then
     echo "Test failed with exit code $test_exit_code."
     exit $test_exit_code
 fi
+
+# if --full in command args then cd to tests/js and execute npm install and npm test
+# they are disabled by default because the js tests are still failing.
+if [[ "$@" == *"--full"* ]]; then
+    echo "Running JS tests"
+else
+    exit 0
+fi
+
+(cd tests/js && npm install && npm test)
+test_exit_code=$?
+if [ $test_exit_code -ne 0 ]; then
+    echo "Test failed with exit code $test_exit_code."
+    exit $test_exit_code
+fi
