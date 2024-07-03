@@ -23,7 +23,7 @@ var configData []byte
 
 func Run(command string, cli *config.CLI, cfg *config.Config, tenantManager models.TenantManager, queue models.Queue) {
 	if tenantManager == nil {
-		tenantManager = defaultmanager.NewDefaultTenantManager()
+		tenantManager = defaultmanager.NewDefaultTenantManager(cfg.Server.SQS.Keys)
 	}
 
 	if queue == nil {
