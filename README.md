@@ -59,3 +59,8 @@ app = Celery("tasks", broker_url="sqs://...@localhost:3001")
 The UI lets you manage queues and search individual messages.
 
 ![Dashboard UI](docs/queue.gif)
+
+
+## Other links
+
+  * https://hub.docker.com/r/roribio16/alpine-sqs/
