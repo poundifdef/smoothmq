@@ -48,7 +48,7 @@ async function runSqsTest(endpointUrl, awsSecretAccessKey) {
     const sqs = new AWS.SQS({
         region: 'us-east-1',
         accessKeyId: 'YOUR_ACCESS_KEY_ID',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        secretAccessKey: awsSecretAccessKey,
         endpoint: new AWS.Endpoint(endpointUrl)
     });
 
