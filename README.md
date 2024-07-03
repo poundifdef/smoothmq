@@ -1,4 +1,4 @@
-# SmoothMQ
+# jobs.kumquat.live
 
 SmoothMQ is a drop-in replacement for SQS with a much smoother developer experience.
 It has a functional UI, observability, tracing, message scheduling, and rate-limiting.
@@ -8,9 +8,14 @@ SmoothMQ lets you run a private SQS instance on any cloud.
 
 ## Login Credentials
 
-The environmental variables `USER` and `PASS` are used to store http credentials.
+/ui will go to the ui of the service.
+  * user: "user"
+  * pass: (see .env file for password)
 
-The dashboard is located at `/` which forwards internally to port 3000 and the api is located at `/api` which forwards to port 3001.
+Note that the AWS_SECRET_ACCESS_KEY you should use in the api is located in the `.env` file.
+
+It will be the same as the password used to access the /ui page.
+
 
 ## Quick Start
 
