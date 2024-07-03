@@ -1,8 +1,27 @@
 const AWS = require('aws-sdk');
 const dotenv = require('dotenv');
 const { promisify } = require('util');
+const path = require('path');
 
-dotenv.config();
+// .env file is located in the root of the project
+const envFile = path.join(__dirname, '../../.env');
+
+// dotenv.config();
+dotenv.config({ path: envFile });
+
+// assert that the AWS_SECRET_ACCESS_KEY is set
+if (!process.env.AWS_SECRET_ACCESS_KEY) {
+    console.error('AWS_SECRET_ACCESS_KEY is not set');
+    process.exit(1);
+} else {
+    // print out the contents of the env file
+    const parsed = dotenv.parse(require('fs').readFileSync(envFile, 'utf-8'));
+    console.log("\nContents of .env file:");
+    Object.entries(parsed).forEach(([key, value]) => {
+        console.log(`${key}=${value}`);
+    });
+    console.log("");
+}
 
 const sleep = promisify(setTimeout);
 
