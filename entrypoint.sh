@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 # Create nginx user and group
 adduser --system --no-create-home --shell /bin/false --group --disabled-login nginx
 
