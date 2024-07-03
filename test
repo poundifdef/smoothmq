@@ -2,9 +2,20 @@
 
 set -e
 ./dev
-# python test.py
+
+# Function to tear down the container
+tear_down() {
+    echo "tearing down container"
+    docker-compose down >/dev/null 2>&1 &  # shut down the container in the background
+}
+
+# Set up trap to ensure tear_down is called on exit
+trap tear_down EXIT
+
 # in a scope, cd to tests/py and execute python test.py
 (cd tests/py && python test.py)
-
-echo "tearing down container"
-docker-compose down >/dev/null 2>&1 &  # shut down the container in the background.
+test_exit_code=$?
+if [ $test_exit_code -ne 0 ]; then
+    echo "Test failed with exit code $test_exit_code."
+    exit $test_exit_code
+fi

@@ -2,6 +2,5 @@
 
 run
 lint
-test
 install
 clean
