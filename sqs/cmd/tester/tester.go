@@ -24,7 +24,7 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string)
 
 	// Hardcoded AWS credentials
 	awsAccessKeyID := "YOUR_ACCESS_KEY_ID"
-	awsSecretAccessKey := "YOUR_SECRET_ACCESS_KEY"
+	awsSecretAccessKey := "YOUR_SECRET_ACCESS_KEY2"
 
 	queueUrl := "https://sqs.us-east-1.amazonaws.com/123/test-queue"
 

@@ -4,12 +4,27 @@ FROM golang:${GO_VERSION}-bookworm as builder
 WORKDIR /usr/src/app
 COPY sqs/go.mod sqs/go.sum ./
 RUN go mod download && go mod verify
-COPY sqs/cmd cmd
-COPY sqs/dashboard dashboard
+
+# Copy and compile individual packages
 COPY sqs/models models
+RUN go build -v ./models
+
 COPY sqs/protocols protocols
+# RUN go build -v ./protocols
+
 COPY sqs/queue queue
+# RUN go build -v ./queue
+
 COPY sqs/tenants tenants
+# RUN go build -v ./tenants
+
+COPY sqs/dashboard dashboard
+RUN go build -v ./dashboard
+
+COPY sqs/cmd cmd
+RUN go build -v ./cmd/...
+
+# Copy remaining files and build the main application
 COPY sqs/*.go ./
 RUN go build -v -o /run-app .
 

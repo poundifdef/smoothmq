@@ -5,7 +5,7 @@ import time
 sqs = boto3.client("sqs", 
                    region_name="us-east-1",
                    aws_access_key_id="YOUR_ACCESS_KEY_ID",
-                   aws_secret_access_key="YOUR_SECRET_ACCESS_KEY",
+                   aws_secret_access_key="YOUR_SECRET_ACCESS_KEY2",
                    endpoint_url="http://localhost")
 
 # Check if the queue already exists
