@@ -49,6 +49,8 @@ RUN echo '#!/bin/bash' > /generate-htpasswd.sh && \
 RUN bash /generate-htpasswd.sh
 
 EXPOSE 80
+
+# For some reason we need to expose these ports our it won't work in docker.
 EXPOSE 3000
 EXPOSE 3001
 
