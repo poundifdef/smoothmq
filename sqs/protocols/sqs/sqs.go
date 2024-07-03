@@ -125,10 +125,31 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 		return s.GetQueueAttributes(c, tenantId)
 	case "AmazonSQS.PurgeQueue":
 		return s.PurgeQueue(c, tenantId)
+	case "AmazonSQS.DeleteQueue":
+		return s.DeleteQueue(c, tenantId)
 	default:
 		return fmt.Errorf("SQS method %s not implemented", awsMethod)
 	}
 
+}
+
+func (s *SQS) DeleteQueue(c *fiber.Ctx, tenantId int64) error {
+	req := &DeleteQueueRequest{}
+
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return err
+	}
+
+	tokens := strings.Split(req.QueueUrl, "/")
+	queue := tokens[len(tokens)-1]
+
+	err = s.queue.DeleteQueue(tenantId, queue)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(DeleteQueueResponse{})
 }
 
 func (s *SQS) PurgeQueue(c *fiber.Ctx, tenantId int64) error {
@@ -257,6 +278,12 @@ func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
 
 	return c.JSON(response)
 }
+
+type DeleteQueueRequest struct {
+	QueueUrl string `json:"QueueUrl"`
+}
+
+type DeleteQueueResponse struct {}
 
 func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 	req := &ReceiveMessageRequest{}

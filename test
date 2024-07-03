@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -e
+./dev
+python test.py
+
+echo "tearing down container"
+docker-compose down >/dev/null 2>&1 &  # shut down the container in the background.

@@ -21,10 +21,12 @@
 go.work
 go.work.sum
 
-# env file
-.env
-
 scratch/
+
+venv/
 
 *.sqlite
 *.db
+.aider*
+!.aider.conf.yml
+!.aiderignore

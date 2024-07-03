@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"path/filepath"
 	"q/models"
 	"strings"
 	"sync"
@@ -41,7 +42,18 @@ var queueMessageCount = promauto.NewGaugeVec(
 )
 
 func NewSQLiteQueue() *SQLiteQueue {
-	filename := "q.sqlite"
+	filename := "/var/data/q.sqlite"
+
+	log.Println("Attempting to use /var/data/q.sqlite as the default file path")
+
+	// Ensure the parent directory exists
+	err := os.MkdirAll(filepath.Dir(filename), 0755)
+	if err != nil {
+		// log.Fatal(err)
+		// log.Println(err)
+		log.Printf("Error creating directory %s: %v, using q.slite instead", filepath.Dir(filename), err)
+		filename = "q.sqlite"
+	}
 
 	snow, err := snowflake.NewNode(1)
 	if err != nil {

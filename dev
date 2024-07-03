@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Attempt to change directory to the directory containing the script
+script_dir=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
+cd "$script_dir" || { 
+    echo "Error: Failed to change to the script's directory. Please check the path."
+    exit 1
+}
+
+# Echo out the current directory
+echo "Running docker-compose in $(pwd)"
+
+# Parse the published port in the docker-compose.yml file
+port=3000
+echo "Starting docker-compose on port $port"
+
+# Check for Python
+if command -v python3 &>/dev/null; then
+    alias python=python3
+    PYTHON_CMD=python3
+elif command -v python &>/dev/null; then
+    PYTHON_CMD=python
+else
+    echo "Neither python nor python3 is available. Exiting."
+    exit 1
+fi
+
+# Check if Docker is running
+if ! docker info > /dev/null 2>&1; then
+    echo "Error: Docker is not running. Please start Docker and try again."
+    exit 1
+fi
+
+# Start docker-compose
+docker-compose down --rmi all
+echo "Starting docker-compose in $(pwd)"
+export SSH_PASS="root"
+docker-compose up  --detach &
+
+# Save the PID of docker-compose
+docker_compose_pid=$!
+
+# Wait for the container to be ready
+while ! curl -s http://localhost:$port > /dev/null; do
+    echo "Waiting for the container to be up and running..."
+    sleep 5
+done
+
+# $PYTHON_CMD -c "import webbrowser; webbrowser.open('http://localhost:$port')"
+# Redirect stdout and stderr of the docker-compose process to /dev/null
+disown $docker_compose_pid
+{ exec 2> /dev/null; exec 1> /dev/null; } > /dev/null 2>&1
+
+
+

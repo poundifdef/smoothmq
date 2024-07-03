@@ -1,0 +1,12 @@
+version: '3.3'
+
+services:
+  app:
+    build: .
+    ports:
+      - published: 80
+        target: 80
+      - published: 3000
+        target: 3000
+      - published: 3001
+        target: 3001
