@@ -3,6 +3,18 @@ import time
 import os
 from dotenv import load_dotenv
 
+def create_or_get_queue(sqs, queue_name: str) -> tuple[str, bool]:
+    response = sqs.list_queues(QueueNamePrefix=queue_name)
+    if 'QueueUrls' in response and len(response['QueueUrls']) > 0:
+        queue_url = response['QueueUrls'][0]
+        print(f"Queue already exists: {queue_url}")
+        return queue_url, False
+    else:
+        response = sqs.create_queue(QueueName=queue_name)
+        queue_url = response['QueueUrl']
+        print(f"Created queue: {queue_url}")
+        return queue_url, True
+
 def run_sqs_test(endpoint_url: str, aws_secret_acess_key: str) -> None:
     # Load environment variables from .env file
     load_dotenv()
@@ -14,19 +26,11 @@ def run_sqs_test(endpoint_url: str, aws_secret_acess_key: str) -> None:
                        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
                        endpoint_url=endpoint_url)
 
-    # Check if the queue already exists
+    # Create or get the queue
     queue_name = "my-test-que-for-testing"
-    response = sqs.list_queues(QueueNamePrefix=queue_name)
-    if 'QueueUrls' in response and len(response['QueueUrls']) > 0:
-        queue_url = response['QueueUrls'][0]
-        print(f"Queue already exists: {queue_url}")
-        queue_created = False
-    else:
-        # Create the queue if it doesn't exist
-        response = sqs.create_queue(QueueName=queue_name)
-        queue_url = response['QueueUrl']
-        print(f"Created queue: {queue_url}")
-        queue_created = True
+    queue_url, queue_created = create_or_get_queue(sqs, queue_name)
+
+    print(f"Queue URL: {queue_url}")
 
     try:
         # Perform operations
