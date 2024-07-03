@@ -10,7 +10,7 @@ start_nginx() {
             echo "Starting nginx"
             nginx
         fi
-        sleep 10
+        sleep 1
     done
 }
 
