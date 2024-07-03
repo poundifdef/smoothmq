@@ -29,8 +29,8 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN dos2unix /entrypoint.sh
 
-ARG USER=USER
-ARG PASS=PASS
+ARG USER=user
+ARG PASS=pass
 ENV USER=$USER
 ENV PASS=$PASS
 
