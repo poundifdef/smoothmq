@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"q/utils"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -22,13 +23,22 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string)
 
 	var sentMessages, receivedMessages int
 
+	// Parse environment variables
+	envMap, err := utils.ParseEnvFile()
+	if err != nil {
+		log.Fatalf("Failed to parse .env file: %v", err)
+	}
+
 	// Hardcoded AWS credentials
 	awsAccessKeyID := "YOUR_ACCESS_KEY_ID"
-	awsSecretAccessKey := "YOUR_SECRET_ACCESS_KEY2"
+	awsSecretAccessKey, ok := envMap["AWS_SECRET_ACCESS_KEY"]
+	if !ok {
+		log.Fatalf("AWS_SECRET_ACCESS_KEY not found in .env file")
+	}
 
 	queueUrl := "https://sqs.us-east-1.amazonaws.com/123/test-queue"
 
-	// Load the AWS configuration with hardcoded credentials
+	// Load the AWS configuration with credentials from .env file
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("us-east-1"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, "")),
