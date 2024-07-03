@@ -17,18 +17,30 @@ RUN go build -v -o /run-app .
 
 
 
+
 FROM debian:bookworm
 
-# install nginx
-RUN apt-get update && apt-get install -y nginx dos2unix && apt-get clean
+# install nginx and apache2-utils (for htpasswd)
+RUN apt-get update && apt-get install -y nginx dos2unix apache2-utils && apt-get clean
 
 COPY --from=builder /run-app /usr/local/bin/
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY entrypoint.sh /entrypoint.sh
-COPY .htpasswd /etc/nginx/.htpasswd
-
 RUN dos2unix /entrypoint.sh
+
+ARG USER=USER
+ARG PASS=PASS
+ENV USER=$USER
+ENV PASS=$PASS
+
+# Generate .htpasswd file using environment variables
+RUN echo '#!/bin/bash' > /generate-htpasswd.sh && \
+    echo 'htpasswd -bc /etc/nginx/.htpasswd "$USER" "$PASS"' >> /generate-htpasswd.sh && \
+    chmod +x /generate-htpasswd.sh
+
+# Run the generate-htpasswd.sh script
+RUN /generate-htpasswd.sh
 
 
 
