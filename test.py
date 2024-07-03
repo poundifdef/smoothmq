@@ -8,11 +8,19 @@ sqs = boto3.client("sqs",
                    aws_secret_access_key="YOUR_SECRET_ACCESS_KEY",
                    endpoint_url="http://localhost:3001")
 
-# Create the queue
+# Check if the queue already exists
 queue_name = "my-test-que-for-testing"
-response = sqs.create_queue(QueueName=queue_name)
-queue_url = response['QueueUrl']
-print(f"Created queue: {queue_url}")
+response = sqs.list_queues(QueueNamePrefix=queue_name)
+if 'QueueUrls' in response and len(response['QueueUrls']) > 0:
+    queue_url = response['QueueUrls'][0]
+    print(f"Queue already exists: {queue_url}")
+    queue_created = False
+else:
+    # Create the queue if it doesn't exist
+    response = sqs.create_queue(QueueName=queue_name)
+    queue_url = response['QueueUrl']
+    print(f"Created queue: {queue_url}")
+    queue_created = True
 
 try:
     # Perform operations
@@ -35,6 +43,4 @@ try:
     time.sleep(2)
 
 finally:
-    # Destroy the queue
-    sqs.delete_queue(QueueUrl=queue_url)
-    print(f"Destroyed queue: {queue_url}")
+    print("done")
