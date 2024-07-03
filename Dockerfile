@@ -5,17 +5,21 @@ WORKDIR /usr/src/app
 COPY sqs/go.mod sqs/go.sum ./
 RUN go mod download && go mod verify
 
-
-
 # Copy and compile individual packages
+
+# One of the base dependencies, so it's first.
 COPY sqs/models models
 RUN go build -v ./models
 
-COPY sqs/protocols protocols
-RUN go build -v ./protocols/sqs
-
+# This is a big compile, so make this early.
 COPY sqs/queue queue
 RUN go build -v ./queue/sqlite
+
+COPY sqs/utils utils
+RUN go build -v ./utils
+
+COPY sqs/protocols protocols
+RUN go build -v ./protocols/sqs
 
 COPY sqs/tenants tenants
 RUN go build -v ./tenants/defaultmanager

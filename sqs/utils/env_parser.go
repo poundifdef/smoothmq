@@ -1,4 +1,4 @@
-package defaultmanager
+package utils
 
 import (
 	"bufio"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func parseEnvFile() (map[string]string, error) {
+func ParseEnvFile() (map[string]string, error) {
 	envMap := make(map[string]string)
 
 	file, err := os.Open("/etc/.env")

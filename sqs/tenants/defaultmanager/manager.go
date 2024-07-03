@@ -3,6 +3,7 @@ package defaultmanager
 import (
 	"fmt"
 	"q/models"
+	"q/utils"
 )
 
 type DefaultTenantManager struct{}
@@ -12,7 +13,7 @@ func (tm *DefaultTenantManager) GetTenant() int64 {
 }
 
 func (tm *DefaultTenantManager) GetAWSSecretKey(accessKey string, region string) (int64, string, error) {
-	envMap, err := parseEnvFile()
+	envMap, err := utils.ParseEnvFile()
 	if err != nil {
 		return 0, "", fmt.Errorf("error parsing .env file: %v", err)
 	}
