@@ -12,13 +12,13 @@ COPY sqs/models models
 RUN go build -v ./models
 
 COPY sqs/protocols protocols
-# RUN go build -v ./protocols
+RUN go build -v ./protocols/sqs
 
 COPY sqs/queue queue
-# RUN go build -v ./queue
+RUN go build -v ./queue/sqlite
 
 COPY sqs/tenants tenants
-# RUN go build -v ./tenants
+RUN go build -v ./tenants/defaultmanager
 
 COPY sqs/dashboard dashboard
 RUN go build -v ./dashboard
