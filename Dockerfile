@@ -26,6 +26,7 @@ COPY --from=builder /run-app /usr/local/bin/
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY entrypoint.sh /entrypoint.sh
+COPY .htpasswd /etc/nginx/.htpasswd
 
 RUN dos2unix /entrypoint.sh
 
