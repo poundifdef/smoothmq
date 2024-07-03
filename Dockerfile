@@ -46,7 +46,7 @@ RUN echo '#!/bin/bash' > /generate-htpasswd.sh && \
     chmod +x /generate-htpasswd.sh
 
 # Run the generate-htpasswd.sh script
-RUN /generate-htpasswd.sh
+RUN bash /generate-htpasswd.sh
 
 EXPOSE 80
 #EXPOSE 3000
@@ -54,4 +54,4 @@ EXPOSE 80
 
 ENV PORT=80
 
-CMD ["/entrypoint.sh"]
+CMD ["run-app"]
