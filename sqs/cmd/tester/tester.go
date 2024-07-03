@@ -6,9 +6,9 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"q/utils"
 	"sync"
 	"time"
-	"q/utils"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -31,6 +31,7 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string)
 
 	// Hardcoded AWS credentials
 	awsAccessKeyID := "YOUR_ACCESS_KEY_ID"
+	// Get AWS_ACCESS_KEY_ID from .env file
 	awsSecretAccessKey, ok := envMap["AWS_SECRET_ACCESS_KEY"]
 	if !ok {
 		log.Fatalf("AWS_SECRET_ACCESS_KEY not found in .env file")
