@@ -26,6 +26,8 @@ go.work.sum
 
 scratch/
 
+venv/
+
 *.sqlite
 *.db
 .aider*
