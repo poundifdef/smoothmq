@@ -1,6 +1,7 @@
 import boto3
 import time
 import os
+import warnings
 from dotenv import load_dotenv
 from pathlib import Path
 import requests
@@ -65,18 +66,26 @@ def run_sqs_test(endpoint_url: str, aws_secret_acess_key: str) -> None:
         sqs.delete_queue(QueueUrl=queue_url)
         print(f"Destroyed queue: {queue_url}")
 
+def check_server_is_alive(endpoint_url: str) -> bool:
+    try:
+        response = requests.get(endpoint_url + "/healthz", timeout=2)
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"\nError: {e}")
+        print(f"\nCould not reach endpoint: {endpoint_url}")
+    return False
+
 def main() -> None:
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
     endpoints = ["http://localhost", "https://jobs.kumquat.live"]
-    for endpoint_url in endpoints:
-        # check to see that the endpoint is reachable within 2 seconds. The endpoint will be /ui
-        try:
-            response = requests.get(endpoint_url + "/healthz", timeout=2)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            print(f"\nError: {e}")
-            print(f"\nCould not reach endpoint: {endpoint_url}")
-            continue
+    for i, endpoint_url in enumerate(endpoints):
+        is_alive = check_server_is_alive(endpoint_url)
+        if not is_alive:
+            warnings.warn(f"Endpoint is not alive: {endpoint_url}")
+            if i == 0:
+                # fatal error for localhost
+                raise Exception("Localhost is not alive")
         print(f"\nTesting with endpoint: {endpoint_url}")
         run_sqs_test(endpoint_url=endpoint_url, aws_secret_acess_key=aws_secret_access_key)
 
