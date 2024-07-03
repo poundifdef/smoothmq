@@ -3,6 +3,9 @@
 # Create nginx user and group
 adduser --system --no-create-home --shell /bin/false --group --disabled-login nginx
 
+# Generate .htpasswd file
+/generate-htpasswd.sh
+
 start_nginx() {
     while true; do
         if ! pgrep -x "nginx" > /dev/null

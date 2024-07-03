@@ -42,7 +42,9 @@ RUN apt-get update && \
     procps \
     bash \
     sudo \
-    curl && \
+    curl \
+    npm && \
+    npm install -g dotenv-cli && \
     apt-get clean
 
 COPY --from=builder /run-app /usr/local/bin/
@@ -51,18 +53,21 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN dos2unix /entrypoint.sh
 
-ARG USER=user
-ARG PASS=pass
-ENV USER=$USER
-ENV PASS=$PASS
+COPY .env /etc/.env
 
-# Generate .htpasswd file using environment variables
-RUN echo '#!/bin/bash' > /generate-htpasswd.sh && \
-    echo 'htpasswd -bc /etc/nginx/.htpasswd "$USER" "$PASS"' >> /generate-htpasswd.sh && \
-    chmod +x /generate-htpasswd.sh
+# Check if AWS_SECRET_ACCESS_KEY argument is provided and not default, then add to /etc/.env
+ARG AWS_SECRET_ACCESS_KEY
+RUN if [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ "$AWS_SECRET_ACCESS_KEY" != "default" ]; then \
+    echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> /etc/.env; \
+    fi
 
-# Run the generate-htpasswd.sh script
-RUN bash /generate-htpasswd.sh
+# Copy the generate-htpasswd.sh script
+COPY generate-htpasswd.sh /generate-htpasswd.sh
+RUN chmod +x /generate-htpasswd.sh
+RUN dos2unix /generate-htpasswd.sh
+RUN /generate-htpasswd.sh
+
+# Run the generate-htpasswd.sh script at container start
 
 EXPOSE 80
 
@@ -72,5 +77,5 @@ EXPOSE 3001
 
 ENV PORT=80
 
-COPY .env /etc/.env
+
 CMD ["/bin/sh", "/entrypoint.sh"]

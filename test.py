@@ -1,11 +1,16 @@
 import boto3
 import time
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure the SQS client
 sqs = boto3.client("sqs", 
                    region_name="us-east-1",
                    aws_access_key_id="YOUR_ACCESS_KEY_ID",
-                   aws_secret_access_key="YOUR_SECRET_ACCESS_KEY2",
+                   aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
                    endpoint_url="http://localhost")
 
 # Check if the queue already exists
