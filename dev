@@ -46,7 +46,6 @@ while ! curl -s http://localhost:$port > /dev/null; do
     sleep 5
 done
 
-echo -e "\nContainer now up and running.\nNow use ./login script to enter into the local container."
 # $PYTHON_CMD -c "import webbrowser; webbrowser.open('http://localhost:$port')"
 # Redirect stdout and stderr of the docker-compose process to /dev/null
 disown $docker_compose_pid
