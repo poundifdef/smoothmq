@@ -1,44 +1,38 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"log"
-	"q/cmd/smoothmq"
-	"q/cmd/tester"
-	"q/models"
-	"q/queue/sqlite"
-	"q/tenants/defaultmanager"
+	"q/config"
 )
 
-func Run(tm models.TenantManager, queue models.Queue) {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+// func Run(command string, config *config.CLI, tenantManager models.TenantManager, queue models.Queue) {
+// 	if tenantManager == nil {
+// 		tenantManager = defaultmanager.NewDefaultTenantManager()
+// 	}
 
-	var runTester bool
-	var numSenders, numReceivers, numMessagesPerGoroutine int
-	var endpoint string
+// 	if queue == nil {
+// 		queue = sqlite.NewSQLiteQueue()
+// 	}
 
-	flag.BoolVar(&runTester, "tester", false, "Run in test mode")
+// 	fmt.Println()
 
-	flag.IntVar(&numSenders, "senders", 0, "Number of send goroutines")
-	flag.IntVar(&numMessagesPerGoroutine, "messages", 1, "Number of messages to send per goroutine")
-	flag.IntVar(&numReceivers, "receivers", 0, "Number of receive goroutines")
-	flag.StringVar(&endpoint, "endpoint", "http://localhost:3001", "SQS endpoint for testing")
-
-	flag.Parse()
-
-	fmt.Println()
-
-	if runTester {
-		tester.Run(numSenders, numReceivers, numMessagesPerGoroutine, endpoint)
-	} else {
-		smoothmq.Run(tm, queue)
-	}
-}
+// 	switch command {
+// 	case "tester":
+// 		tester.Run(config.Tester.Senders, config.Tester.Receivers, config.Tester.Messages, config.Tester.SqsEndpoint)
+// 	default:
+// 		smoothmq.Run(tenantManager, queue, config.Queue)
+// 	}
+// }
 
 func main() {
-	tenantManager := defaultmanager.NewDefaultTenantManager()
-	queue := sqlite.NewSQLiteQueue()
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	Run(tenantManager, queue)
+	command, cli, err := config.Load()
+	if err != nil {
+		panic(err)
+	}
+
+	return
+
+	// Run(command, config, nil, nil)
 }

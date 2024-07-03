@@ -24,6 +24,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"q/config"
 	"q/models"
 	"strconv"
 	"strings"
@@ -39,9 +40,11 @@ type SQS struct {
 	app           *fiber.App
 	queue         models.Queue
 	tenantManager models.TenantManager
+
+	cfg config.SQSConfig
 }
 
-func NewSQS(queue models.Queue, tenantManager models.TenantManager) *SQS {
+func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.SQSConfig) *SQS {
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger().Level(zerolog.ErrorLevel)
@@ -54,6 +57,7 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager) *SQS {
 		app:           app,
 		queue:         queue,
 		tenantManager: tenantManager,
+		cfg:           cfg,
 	}
 
 	app.Use(s.authMiddleware)
@@ -88,12 +92,19 @@ func (s *SQS) authMiddleware(c *fiber.Ctx) error {
 }
 
 func (s *SQS) Start() error {
-	fmt.Println("SQS Endpoint: http://localhost:3001")
-	return s.app.Listen(":3001")
+	if !s.cfg.Enabled {
+		return nil
+	}
+
+	fmt.Printf("SQS Endpoint: http://localhost:%d\n", s.cfg.Port)
+	return s.app.Listen(fmt.Sprintf(":%d", s.cfg.Port))
 }
 
 func (s *SQS) Stop() error {
-	return s.app.Shutdown()
+	if s.cfg.Enabled {
+		return s.app.Shutdown()
+	}
+	return nil
 }
 
 func (s *SQS) Action(c *fiber.Ctx) error {
