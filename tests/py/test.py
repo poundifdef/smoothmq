@@ -71,7 +71,7 @@ def main() -> None:
     for endpoint_url in endpoints:
         # check to see that the endpoint is reachable within 2 seconds. The endpoint will be /ui
         try:
-            response = requests.get(endpoint_url + "/ui", timeout=2)
+            response = requests.get(endpoint_url + "/healthz", timeout=2)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(f"\nError: {e}")
