@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch JS Test",
+            "program": "${workspaceFolder}/tests/js/test.js",
+            "cwd": "${workspaceFolder}/tests/js",
+            "console": "integratedTerminal"
+        }
+    ]
+}
