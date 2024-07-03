@@ -2,20 +2,16 @@ ARG GO_VERSION=1.22
 FROM golang:${GO_VERSION}-bookworm as builder
 
 WORKDIR /usr/src/app
-COPY go.mod go.sum ./
+COPY sqs/go.mod sqs/go.sum ./
 RUN go mod download && go mod verify
-# COPY . .
-COPY cmd cmd
-COPY dashboard dashboard
-COPY docs docs
-COPY models models
-COPY protocols protocols
-COPY queue queue
-COPY tenants tenants
-COPY *.go ./
+COPY sqs/cmd cmd
+COPY sqs/dashboard dashboard
+COPY sqs/models models
+COPY sqs/protocols protocols
+COPY sqs/queue queue
+COPY sqs/tenants tenants
+COPY sqs/*.go ./
 RUN go build -v -o /run-app .
-
-
 
 
 FROM debian:bookworm
