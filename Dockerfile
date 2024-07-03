@@ -20,12 +20,13 @@ RUN go build -v -o /run-app .
 
 FROM debian:bookworm
 
-# install nginx, apache2-utils (for htpasswd), and bash
+# install nginx, apache2-utils (for htpasswd), pgrep, and bash
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nginx \
     dos2unix \
     apache2-utils \
+    procps \
     bash && \
     apt-get clean
 
