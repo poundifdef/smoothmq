@@ -54,4 +54,4 @@ EXPOSE 80
 
 ENV PORT=80
 
-CMD ["run-app"]
+CMD ["/bin/sh", "/entrypoint.sh"]
