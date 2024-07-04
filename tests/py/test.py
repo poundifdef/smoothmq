@@ -26,10 +26,9 @@ def create_or_get_queue(sqs, queue_name: str) -> tuple[str, bool]:
 
 def run_sqs_test(endpoint_url: str, aws_secret_acess_key: str) -> None:
     # Load environment variables from .env file
-
     params = {
         "region_name": "us-east-1",
-        "aws_secret_access_key":'YOUR_ACCESS_KEY_ID',
+        "aws_access_key_id":'YOUR_ACCESS_KEY_ID',
         "aws_secret_access_key": aws_secret_acess_key,
         "endpoint_url": endpoint_url
     }
