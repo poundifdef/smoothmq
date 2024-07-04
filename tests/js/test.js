@@ -45,12 +45,19 @@ async function createOrGetQueue(sqs, queueName) {
 }
 
 async function runSqsTest(endpointUrl, awsSecretAccessKey) {
-    const sqs = new AWS.SQS({
+    const params = {
         region: 'us-east-1',
         accessKeyId: 'YOUR_ACCESS_KEY_ID',
         secretAccessKey: awsSecretAccessKey,
-        endpoint: new AWS.Endpoint(endpointUrl)
-    });
+        endpoint: new AWS.Endpoint(endpointUrl),
+        httpOptions: {
+            agent: endpointUrl.startsWith('https')
+                ? new (require('https').Agent)({ rejectUnauthorized: false })
+                : new (require('http').Agent)({ rejectUnauthorized: false })
+        }
+    }
+    console.log('Creating SQS client with params:', params)
+    const sqs = new AWS.SQS(params);
 
     const queueName = 'my-test-que-for-testing';
     let queueUrl, queueCreated;
