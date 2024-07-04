@@ -1,10 +1,12 @@
 {
-  "dependencies": {
-    "aws-sdk": "^2.1654.0",
-    "dotenv": "^16.4.5",
-    "util": "^0.12.5"
-  },
-  "scripts": {
-    "test": "node test.js"
-  }
+    "dependencies": {
+        "aws-sdk": "^2.1654.0",
+        "@aws-sdk/client-sqs": "^3.609.0",
+        "dotenv": "^16.4.5",
+        "semver": "^7.6.2",
+        "util": "^0.12.5"
+    },
+    "scripts": {
+        "test": "node test.js"
+    }
 }

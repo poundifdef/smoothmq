@@ -26,7 +26,6 @@
             "console": "integratedTerminal",
             "args": [],
             "env": {},
-            "envFile": "${workspaceFolder}/.env",
             "skipFiles": [
                 "<node_internals>/**",
                 "${workspaceFolder}/test/py/**"
