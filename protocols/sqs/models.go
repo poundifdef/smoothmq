@@ -95,3 +95,12 @@ type PurgeQueueRequest struct {
 type PurgeQueueResponse struct {
 	Success bool `json:"Success"`
 }
+
+type GetQueueURLRequest struct {
+	QueueName              string `json:"QueueName"`
+	QueueOwnerAWSAccountId string `json:"QueueOwnerAWSAccountId"`
+}
+
+type GetQueueURLResponse struct {
+	QueueURL string `json:"QueueUrl"`
+}
