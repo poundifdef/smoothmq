@@ -2,6 +2,10 @@ package sqs
 
 import "fmt"
 
+// SQS error response format: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-json-api-responses.html#sqs-api-error-response-structure
+// Common errors across all requests: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/CommonErrors.html
+// Individual methods have errors: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_GetQueueUrl.html#API_GetQueueUrl_Errors
+
 type SQSError struct {
 	Code    int    `json:"-"`
 	Type    string `json:"__type"`

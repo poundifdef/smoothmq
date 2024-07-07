@@ -6,12 +6,14 @@ https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_Receiv
 https://docs.aws.amazon.com/cli/latest/reference/sqs/delete-message.html
 
 Testing:
+AWS_ACCESS_KEY_ID=DEV_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=DEV_SECRET_ACCESS_KEY aws sqs ...
 aws sqs list-queues --endpoint-url http://localhost:3001
 aws sqs send-message --queue-url https://sqs.us-east-1.amazonaws.com/1/a --message-body "hello world" --endpoint-url http://localhost:3001
 aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
 aws sqs delete-message --receipt-handle x --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
 aws sqs create-queue --queue-name b --endpoint-url http://localhost:3001
 aws sqs get-queue-attributes --queue-url https://sqs.us-east-1.amazonaws.com/1/a --endpoint-url http://localhost:3001
+aws sqs get-queue-url --debug --queue-name test-queue --endpoint-url http://localhost:3001
 */
 
 import (
