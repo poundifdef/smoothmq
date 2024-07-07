@@ -45,7 +45,16 @@ type SQS struct {
 }
 
 func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.SQSConfig) *SQS {
-	app := fiber.New(fiber.Config{DisableStartupMessage: true})
+	s := &SQS{
+		queue:         queue,
+		tenantManager: tenantManager,
+		cfg:           cfg,
+	}
+
+	app := fiber.New(fiber.Config{
+		DisableStartupMessage: true,
+		ErrorHandler:          s.errorHandler,
+	})
 
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger().Level(zerolog.ErrorLevel)
 
@@ -53,38 +62,42 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 		Logger: &logger,
 	}))
 
-	s := &SQS{
-		app:           app,
-		queue:         queue,
-		tenantManager: tenantManager,
-		cfg:           cfg,
-	}
-
 	app.Use(s.authMiddleware)
 	app.Post("/*", s.Action)
 
+	s.app = app
+
 	return s
+}
+
+func (s *SQS) errorHandler(c *fiber.Ctx, err error) error {
+	sqsErr, ok := err.(*SQSError)
+	if ok {
+		return c.Status(sqsErr.Code).JSON(sqsErr)
+	}
+
+	return err
 }
 
 func (s *SQS) authMiddleware(c *fiber.Ctx) error {
 	r, err := adaptor.ConvertRequest(c, false)
 	if err != nil {
-		return err
+		return ErrIncompleteSignature
 	}
 
 	awsHeader, err := ParseAuthorizationHeader(r)
 	if err != nil {
-		return err
+		return ErrIncompleteSignature
 	}
 
 	tenantId, secretKey, err := s.tenantManager.GetAWSSecretKey(awsHeader.AccessKey, awsHeader.Region)
 	if err != nil {
-		return err
+		return ErrInvalidClientTokenId
 	}
 
 	err = ValidateAWSRequest(awsHeader, secretKey, r)
 	if err != nil {
-		return err
+		return ErrIncompleteSignature
 	}
 
 	c.Locals("tenantId", tenantId)
@@ -130,6 +143,8 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 		return s.DeleteMessage(c, tenantId)
 	case "AmazonSQS.ListQueues":
 		return s.ListQueues(c, tenantId)
+	case "AmazonSQS.GetQueueUrl":
+		return s.GetQueueURL(c, tenantId)
 	case "AmazonSQS.CreateQueue":
 		return s.CreateQueue(c, tenantId)
 	case "AmazonSQS.GetQueueAttributes":
@@ -137,7 +152,7 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 	case "AmazonSQS.PurgeQueue":
 		return s.PurgeQueue(c, tenantId)
 	default:
-		return fmt.Errorf("SQS method %s not implemented", awsMethod)
+		return NewSQSError(400, "UnsupportedOperation", fmt.Sprintf("SQS method %s not implemented", awsMethod))
 	}
 
 }
@@ -208,6 +223,10 @@ func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
 	return c.JSON(rc)
 }
 
+func (s *SQS) queueURL(tenantId int64, queue string) string {
+	return fmt.Sprintf("https://sqs.us-east-1.amazonaws.com/%d/%s", tenantId, queue)
+
+}
 func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
 	queues, err := s.queue.ListQueues(tenantId)
 	if err != nil {
@@ -217,7 +236,7 @@ func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
 	queueUrls := make([]string, len(queues))
 
 	for i, queue := range queues {
-		queueUrls[i] = fmt.Sprintf("https://sqs.us-east-1.amazonaws.com/%d/%s", tenantId, queue)
+		queueUrls[i] = s.queueURL(tenantId, queue)
 	}
 
 	rc := ListQueuesResponse{
@@ -225,6 +244,31 @@ func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
 	}
 
 	return c.JSON(rc)
+}
+
+func (s *SQS) GetQueueURL(c *fiber.Ctx, tenantId int64) error {
+	req := &GetQueueURLRequest{}
+
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return ErrValidationError
+	}
+
+	queues, err := s.queue.ListQueues(tenantId)
+	if err != nil {
+		return err
+	}
+
+	for _, q := range queues {
+		if q == req.QueueName {
+			response := GetQueueURLResponse{
+				QueueURL: s.queueURL(tenantId, q),
+			}
+			return c.JSON(response)
+		}
+	}
+
+	return ErrQueueDoesNotExist
 }
 
 func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
