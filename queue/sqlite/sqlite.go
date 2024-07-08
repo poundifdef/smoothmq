@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"q/config"
 	"q/models"
 	"strings"
 	"sync"
@@ -40,20 +41,18 @@ var queueMessageCount = promauto.NewGaugeVec(
 	[]string{"tenant_id", "queue", "status"},
 )
 
-func NewSQLiteQueue() *SQLiteQueue {
-	filename := "q.sqlite"
-
+func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 	snow, err := snowflake.NewNode(1)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	newDb := false
-	if _, err := os.Stat(filename); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(cfg.Path); errors.Is(err, os.ErrNotExist) {
 		newDb = true
 	}
 
-	db, err := sqlx.Open("sqlite3", filename+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full")
+	db, err := sqlx.Open("sqlite3", cfg.Path+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -88,7 +87,7 @@ func NewSQLiteQueue() *SQLiteQueue {
 	}
 
 	rc := &SQLiteQueue{
-		filename: filename,
+		filename: cfg.Path,
 		db:       db,
 		mu:       &sync.Mutex{},
 		snow:     snow,
@@ -99,7 +98,6 @@ func NewSQLiteQueue() *SQLiteQueue {
 		for {
 			select {
 			case <-rc.ticker.C:
-				// stat, err := os.Stat("q.txt")
 				stat, err := os.Stat(rc.filename)
 				if err == nil {
 					queueDiskSize.Set(float64(stat.Size()))

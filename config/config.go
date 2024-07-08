@@ -29,6 +29,11 @@ type LogConfig struct {
 type ServerConfig struct {
 	SQS       SQSConfig       `koanf:"sqs"`
 	Dashboard DashboardConfig `koanf:"dashboard"`
+	SQLite    SQLiteConfig    `koanf:"sqlite"`
+}
+
+type SQLiteConfig struct {
+	Path string `koanf:"path"`
 }
 
 type SQSConfig struct {
