@@ -27,7 +27,7 @@ func Run(command string, cli *config.CLI, cfg *config.Config, tenantManager mode
 	}
 
 	if queue == nil {
-		queue = sqlite.NewSQLiteQueue()
+		queue = sqlite.NewSQLiteQueue(cfg.Server.SQLite)
 	}
 
 	fmt.Println()
