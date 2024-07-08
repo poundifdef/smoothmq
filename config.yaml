@@ -10,3 +10,6 @@ server:
   dashboard:
     enabled: true
     port: 3000
+
+  sqlite:
+    path: smoothmq.sqlite
