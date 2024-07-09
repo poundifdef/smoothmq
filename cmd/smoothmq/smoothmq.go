@@ -14,7 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerConfig) {
+func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) {
 	dashboardServer := dashboard.NewDashboard(queue, tm, cfg.Dashboard)
 	go func() {
 		dashboardServer.Start()
