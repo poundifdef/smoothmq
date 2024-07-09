@@ -4,8 +4,8 @@ server:
     enabled: true
     port: 3001
     keys:
-      - access_key: DEV_ACCESS_KEY_ID
-        secret_key: DEV_SECRET_ACCESS_KEY
+      - accesskey: DEV_ACCESS_KEY_ID
+        secretkey: DEV_SECRET_ACCESS_KEY
 
   dashboard:
     enabled: true
