@@ -23,9 +23,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+
 	"net/http"
-	"os"
 	"q/config"
 	"q/models"
 	"strconv"
@@ -34,7 +33,7 @@ import (
 	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
-	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
@@ -58,10 +57,8 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 		ErrorHandler:          s.errorHandler,
 	})
 
-	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger().Level(zerolog.ErrorLevel)
-
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
-		Logger: &logger,
+		Logger: &log.Logger,
 	}))
 
 	app.Use(s.authMiddleware)
@@ -74,11 +71,11 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 
 func (s *SQS) errorHandler(c *fiber.Ctx, err error) error {
 	sqsErr, ok := err.(*SQSError)
-	if ok {
-		return c.Status(sqsErr.Code).JSON(sqsErr)
+	if !ok {
+		sqsErr = NewSQSError(500, "InternalFailure", err.Error())
 	}
 
-	return err
+	return c.Status(sqsErr.Code).JSON(sqsErr)
 }
 
 func (s *SQS) authMiddleware(c *fiber.Ctx) error {
@@ -369,7 +366,7 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 			} else if attr.DataType == "Binary" {
 				data, err := base64.StdEncoding.DecodeString(v)
 				if err != nil {
-					log.Println(message.ID, err)
+					log.Trace().Int64("message_id", message.ID).Err(err).Msg("Unable to decode binary SQS attribute")
 				} else {
 					attr.BinaryValue = data
 				}
