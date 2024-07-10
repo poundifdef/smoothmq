@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"q/config"
 	"q/models"
 	"strconv"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/template/html/v2"
@@ -31,7 +32,7 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg co
 	http.FS(viewsfs)
 	fs2, err := fs.Sub(viewsfs, "views")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Send()
 	}
 	engine := html.NewFileSystem(http.FS(fs2), ".html")
 	// engine := html.New("./dashboard/views", ".html")

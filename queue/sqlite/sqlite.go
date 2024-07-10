@@ -2,13 +2,14 @@ package sqlite
 
 import (
 	"errors"
-	"log"
 	"os"
 	"q/config"
 	"q/models"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -44,7 +45,7 @@ var queueMessageCount = promauto.NewGaugeVec(
 func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 	snow, err := snowflake.NewNode(1)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Send()
 	}
 
 	newDb := false
@@ -54,13 +55,13 @@ func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 
 	db, err := sqlx.Open("sqlite3", cfg.Path+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Send()
 	}
 
 	if newDb {
 		tx, err := db.Begin()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal().Err(err).Send()
 		}
 
 		// TODO: check for errors
@@ -163,7 +164,7 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
 	rows, err := q.db.Query("SELECT name FROM queues WHERE tenant_id=?", tenantId)
 	if err != nil {
-		log.Println(err)
+		log.Error().Err(err).Int64("tenant_id", tenantId).Msg("Unable to list queues")
 		return nil, err
 	}
 
@@ -318,7 +319,7 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 	}
 
 	if rowsAffected != int64(len(messageIDs)) {
-		log.Printf("Dequeued unexpected number of messages %d rowsAffected %d", len(messageIDs), rowsAffected)
+		log.Error().Int64("tenant_id", tenantId).Str("queue", queue).Int64("rowsAffected", rowsAffected).Ints64("message_ids", messageIDs).Msg("Dequeued unexpected number of messages")
 		return nil, nil
 	}
 
@@ -359,7 +360,7 @@ func (q *SQLiteQueue) Peek(tenantId int64, queue string, messageId int64) *model
 
 	rows, err := q.db.Queryx("SELECT k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id=?", tenantId, queueId, messageId)
 	if err != nil {
-		log.Println(err)
+		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queue).Int64("message_id", messageId).Msg("Unable to get k/v")
 	} else {
 		for rows.Next() {
 			var k, v string
@@ -494,7 +495,7 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	}
 
 	if rowsAffected != 1 {
-		log.Printf("Deleted unexpected number of messages %d rowsAffected %d", messageId, rowsAffected)
+		log.Error().Int64("tenant_id", tenantId).Str("queue", queue).Int64("rowsAffected", rowsAffected).Int64("message_id", messageId).Msg("Deleted unexpected number of messages")
 		return nil
 	}
 
@@ -509,7 +510,7 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 		messageId,
 	)
 	if err != nil {
-		log.Println(err)
+		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queue).Int64("message_id", messageId).Msg("Unable to delete message")
 		// return err
 	}
 
