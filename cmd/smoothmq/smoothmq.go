@@ -2,42 +2,42 @@ package smoothmq
 
 import (
 	"fmt"
-	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
+	"path/filepath"
+	"strconv"
 
+	"github.com/poundifdef/smoothmq/cmd/smoothmq/server"
+	"github.com/poundifdef/smoothmq/cmd/smoothmq/tester"
 	"github.com/poundifdef/smoothmq/config"
-	"github.com/poundifdef/smoothmq/dashboard"
 	"github.com/poundifdef/smoothmq/models"
-	"github.com/poundifdef/smoothmq/protocols/sqs"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/poundifdef/smoothmq/queue/sqlite"
+	"github.com/poundifdef/smoothmq/tenants/defaultmanager"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
-func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) {
-	dashboardServer := dashboard.NewDashboard(queue, tm, cfg.Dashboard)
-	go func() {
-		dashboardServer.Start()
-	}()
+func Run(command string, cfg *config.CLI, tenantManager models.TenantManager, queue models.Queue) {
+	zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
+		return filepath.Base(file) + ":" + strconv.Itoa(line)
+	}
 
-	sqsServer := sqs.NewSQS(queue, tm, cfg.SQS)
-	go func() {
-		sqsServer.Start()
-	}()
+	// TODO: read log level and format from config
+	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Caller().Logger().Level(zerolog.TraceLevel)
 
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(":2112", nil)
-	}()
+	if tenantManager == nil {
+		tenantManager = defaultmanager.NewDefaultTenantManager(cfg.Server.SQS.Keys)
+	}
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	if queue == nil {
+		queue = sqlite.NewSQLiteQueue(cfg.Server.SQLite)
+	}
 
-	<-c // This blocks the main thread until an interrupt is received
-	fmt.Println("Gracefully shutting down...")
+	fmt.Println()
 
-	dashboardServer.Stop()
-	sqsServer.Stop()
-	queue.Shutdown()
+	switch command {
+	case "tester":
+		tester.Run(cfg.Tester.Senders, cfg.Tester.Receivers, cfg.Tester.Messages, cfg.Tester.SqsEndpoint)
+	default:
+		server.Run(tenantManager, queue, cfg.Server)
+	}
 }
