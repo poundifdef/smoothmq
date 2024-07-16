@@ -3,8 +3,9 @@ package defaultmanager
 import (
 	"errors"
 	"fmt"
-	"q/config"
-	"q/models"
+
+	"github.com/poundifdef/smoothmq/config"
+	"github.com/poundifdef/smoothmq/models"
 )
 
 type DefaultTenantManager struct {

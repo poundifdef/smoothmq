@@ -1,4 +1,4 @@
-module q
+module github.com/poundifdef/smoothmq
 
 go 1.22.2
 

@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"q/config"
-	"q/models"
 	"strconv"
 	"strings"
+
+	"github.com/poundifdef/smoothmq/config"
+	"github.com/poundifdef/smoothmq/models"
 
 	"github.com/rs/zerolog/log"
 
