@@ -3,11 +3,12 @@ package sqlite
 import (
 	"errors"
 	"os"
-	"q/config"
-	"q/models"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/poundifdef/smoothmq/config"
+	"github.com/poundifdef/smoothmq/models"
 
 	"github.com/rs/zerolog/log"
 

@@ -25,10 +25,11 @@ import (
 	"fmt"
 
 	"net/http"
-	"q/config"
-	"q/models"
 	"strconv"
 	"strings"
+
+	"github.com/poundifdef/smoothmq/config"
+	"github.com/poundifdef/smoothmq/models"
 
 	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/fiber/v2"

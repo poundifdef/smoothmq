@@ -5,11 +5,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"q/config"
-	"q/dashboard"
-	"q/models"
-	"q/protocols/sqs"
 	"syscall"
+
+	"github.com/poundifdef/smoothmq/config"
+	"github.com/poundifdef/smoothmq/dashboard"
+	"github.com/poundifdef/smoothmq/models"
+	"github.com/poundifdef/smoothmq/protocols/sqs"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
