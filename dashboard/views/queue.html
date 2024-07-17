@@ -41,16 +41,16 @@
             <tbody>
             {{range .Messages}}
               <tr>
-                <td>
+                <td valign="top">
                     <a href="/queues/{{$.Queue}}/messages/{{.ID}}">{{.ID}}</a>
                 </td>
-                <td>{{.Status}}</td>
-                <td>
+                <td valign="top">{{.Status}}</td>
+                <td valign="top">
                     {{range $k, $v := .KeyValues}}
-                    {{$k}}: {{$v}}
+                    <b>{{$k}}:</b> {{$v}}
                     {{end}}
                 </td>
-                <td>{{printf "%s" .Message}}</td>
+                <td style="word-break: break-word;" valign="top">{{printf "%s" .Message}}</td>
               </tr>
             {{end}}
             </tbody>

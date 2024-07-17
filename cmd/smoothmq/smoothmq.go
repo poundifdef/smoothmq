@@ -22,7 +22,11 @@ func Run(command string, cfg *config.CLI, tenantManager models.TenantManager, qu
 	}
 
 	// TODO: read log level and format from config
-	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Caller().Logger().Level(zerolog.TraceLevel)
+	logLevel, _ := zerolog.ParseLevel(cfg.Log.Level)
+	log.Logger = zerolog.New(os.Stderr).With().Timestamp().Caller().Logger().Level(logLevel)
+	if cfg.Log.Pretty {
+		log.Logger = log.Logger.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
 
 	if tenantManager == nil {
 		tenantManager = defaultmanager.NewDefaultTenantManager(cfg.Server.SQS.Keys)
