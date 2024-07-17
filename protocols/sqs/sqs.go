@@ -30,10 +30,12 @@ import (
 
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
+	"github.com/tidwall/gjson"
 
 	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
@@ -60,6 +62,7 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
 		Logger: &log.Logger,
+		Levels: []zerolog.Level{zerolog.ErrorLevel, zerolog.WarnLevel, zerolog.TraceLevel},
 	}))
 
 	app.Use(s.authMiddleware)
@@ -121,6 +124,8 @@ func (s *SQS) Stop() error {
 }
 
 func (s *SQS) Action(c *fiber.Ctx) error {
+	log.Trace().Interface("headers", c.GetReqHeaders()).Bytes("body", c.Body()).Send()
+
 	awsMethodHeader, ok := c.GetReqHeaders()["X-Amz-Target"]
 	if !ok {
 		return errors.New("X-Amz-Target header not found")
@@ -294,6 +299,26 @@ func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
 			kv[k] = v.StringValue
 		} else if v.DataType == "Binary" {
 			kv[k] = v.BinaryValue
+		}
+	}
+
+	// Try to parse celery task and ID
+	if s.cfg.ParseCelery {
+		// Is our message a JSON string?
+		if strings.HasPrefix(req.MessageBody, "ey") {
+			jsonStr, err := base64.StdEncoding.DecodeString(req.MessageBody)
+
+			if err == nil {
+				res := gjson.GetBytes(jsonStr, "headers.task")
+				if res.Exists() {
+					kv["celery_task"] = res.Str
+				}
+
+				res = gjson.GetBytes(jsonStr, "headers.id")
+				if res.Exists() {
+					kv["celery_id"] = res.Str
+				}
+			}
 		}
 	}
 

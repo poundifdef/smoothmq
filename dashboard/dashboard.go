@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"embed"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -30,15 +32,31 @@ type Dashboard struct {
 }
 
 func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg config.DashboardConfig) *Dashboard {
-	http.FS(viewsfs)
-	fs2, err := fs.Sub(viewsfs, "views")
-	if err != nil {
-		log.Fatal().Err(err).Send()
+	var engine *html.Engine
+
+	if cfg.Dev {
+		engine = html.New("./dashboard/views", ".html")
+		engine.Reload(true)
+		engine.Debug(true)
+	} else {
+		http.FS(viewsfs)
+		fs2, err := fs.Sub(viewsfs, "views")
+		if err != nil {
+			log.Fatal().Err(err).Send()
+		}
+		engine = html.NewFileSystem(http.FS(fs2), ".html")
 	}
-	engine := html.NewFileSystem(http.FS(fs2), ".html")
-	// engine := html.New("./dashboard/views", ".html")
-	// engine.Reload(true)
-	// engine.Debug(true)
+
+	engine.AddFunc("b64Json", func(s []byte) string {
+		decodedStr, err := base64.StdEncoding.DecodeString(string(s))
+		if err == nil {
+			if json.Valid(decodedStr) {
+				return string(decodedStr)
+			}
+		}
+
+		return string(s)
+	})
 
 	app := fiber.New(fiber.Config{
 		Views:                 engine,

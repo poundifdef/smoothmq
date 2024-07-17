@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 )
 
 type MessageStatus uint8
@@ -13,6 +14,17 @@ const (
 	// MessageStatusPaused   MessageStatus = 3
 	// MessageStatusDeleted  MessageStatus = 4
 )
+
+func (s MessageStatus) String() string {
+	switch s {
+	case MessageStatusQueued:
+		return "Queued"
+	case MessageStatusDequeued:
+		return "Dequeued"
+	}
+
+	return fmt.Sprintf("%d", s)
+}
 
 type Message struct {
 	ID        int64         `db:"id"`

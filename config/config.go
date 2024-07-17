@@ -30,8 +30,8 @@ type ServerCommand struct {
 }
 
 type LogConfig struct {
-	Pretty bool   `name:"pretty"`
-	Level  string `name:"level"`
+	Pretty bool   `name:"pretty" default:"true"`
+	Level  string `name:"level" enum:"trace,debug,info,warn,error,fatal,panic" default:"debug" help:"Log level"`
 }
 
 type SQLiteConfig struct {
@@ -39,9 +39,10 @@ type SQLiteConfig struct {
 }
 
 type SQSConfig struct {
-	Enabled bool     `name:"enabled" default:"true" help:"Enable SQS protocol for queue" env:"ENABLED"`
-	Port    int      `name:"port" default:"3001" help:"HTTP port for SQS protocol" env:"PORT"`
-	Keys    []AWSKey `name:"keys" default:"DEV_ACCESS_KEY_ID:DEV_SECRET_ACCESS_KEY" env:"KEYS"`
+	Enabled     bool     `name:"enabled" default:"true" help:"Enable SQS protocol for queue" env:"ENABLED"`
+	Port        int      `name:"port" default:"3001" help:"HTTP port for SQS protocol" env:"PORT"`
+	Keys        []AWSKey `name:"keys" default:"DEV_ACCESS_KEY_ID:DEV_SECRET_ACCESS_KEY" env:"KEYS"`
+	ParseCelery bool     `name:"parse-celery" default:"true" env:"PARSE_CELERY" help:"Parse Celery messages. Lets you search by celery message ID and task type."`
 }
 
 type AWSKey struct {
@@ -71,6 +72,7 @@ func (k *AWSKey) Decode(ctx *kong.DecodeContext) error {
 type DashboardConfig struct {
 	Enabled bool `name:"enabled" help:"Enable web dashboard" default:"true" env:"ENABLED"`
 	Port    int  `name:"port" help:"HTTP port for dashboard" default:"3000" env:"PORT"`
+	Dev     bool `name:"dev" help:"Run dashboard in dev mode, refresh templates from local" default:"false" env:"DEV"`
 }
 
 func Load() (string, *CLI, error) {
