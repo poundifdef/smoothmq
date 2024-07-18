@@ -21,6 +21,7 @@ type TesterCommand struct {
 	Senders     int    `help:"" default:"0"`
 	Receivers   int    `help:"" default:"0"`
 	Messages    int    `help:"" default:"0"`
+	BatchSize   int    `help:"" default:"1"`
 }
 
 type ServerCommand struct {

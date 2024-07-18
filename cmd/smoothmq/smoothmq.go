@@ -40,7 +40,7 @@ func Run(command string, cfg *config.CLI, tenantManager models.TenantManager, qu
 
 	switch command {
 	case "tester":
-		tester.Run(cfg.Tester.Senders, cfg.Tester.Receivers, cfg.Tester.Messages, cfg.Tester.SqsEndpoint)
+		tester.Run(cfg.Tester)
 	default:
 		server.Run(tenantManager, queue, cfg.Server)
 	}

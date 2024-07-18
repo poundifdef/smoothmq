@@ -3,11 +3,15 @@ package tester
 import (
 	"context"
 	"fmt"
-	"log"
+
+	"github.com/rs/zerolog/log"
+
 	"math/rand"
 	"os"
 	"sync"
 	"time"
+
+	smoothCfg "github.com/poundifdef/smoothmq/config"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -16,7 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
-func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string) {
+func Run(c smoothCfg.TesterCommand) {
 
 	// BaseEndpoint := "https://smoothmq-sqs.fly.dev"
 
@@ -33,9 +37,9 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string)
 		config.WithRegion("us-east-1"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, "")),
 	)
-	cfg.BaseEndpoint = &endpoint
+	cfg.BaseEndpoint = &c.SqsEndpoint
 	if err != nil {
-		log.Fatalf("unable to load SDK config, %v", err)
+		log.Fatal().Msgf("unable to load SDK config, %v", err)
 	}
 	// cfg.RateLimiter = NoOpRateLimit{}
 
@@ -45,18 +49,18 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string)
 
 	var ch chan int
 
-	for i := 0; i < numSenders; i++ {
+	for i := 0; i < c.Senders; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numMessagesPerGoroutine; j++ {
-				sendMessage(sqsClient, queueUrl, id, j)
+			for j := 0; j < c.Messages; j += c.BatchSize {
+				sendMessage(sqsClient, queueUrl, id, j, c.BatchSize)
 				sentMessages += 1
 			}
 		}(i)
 	}
 
-	for i := 0; i < numReceivers; i++ {
+	for i := 0; i < c.Receivers; i++ {
 		go func(id int) {
 			for {
 				msgs := receiveMessage(sqsClient, queueUrl, id)
@@ -72,16 +76,16 @@ func Run(numSenders, numReceivers, numMessagesPerGoroutine int, endpoint string)
 			if sentMessages > 0 {
 				pct = float64(receivedMessages) / float64(sentMessages)
 			}
-			log.Printf("sent: %d, received: %d, pct: %f\n", sentMessages, receivedMessages, pct)
+			log.Printf("sent: %d, received: %d, pct: %f", sentMessages, receivedMessages, pct)
 			time.Sleep(1 * time.Second)
 		}
 	}()
 
 	wg.Wait()
 
-	if numSenders > 0 {
-		log.Println("All messages sent")
-		if numReceivers == 0 {
+	if c.Senders > 0 {
+		log.Printf("All messages sent")
+		if c.Receivers == 0 {
 			os.Exit(0)
 		}
 	}
@@ -98,27 +102,58 @@ func GenerateRandomString(n int) string {
 	return string(b)
 }
 
-func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID int) {
+func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, batchSize int) {
 
-	messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(2000))
-	input := &sqs.SendMessageInput{
-		QueueUrl:    aws.String(queueUrl),
-		MessageBody: aws.String(messageBody),
-		MessageAttributes: map[string]types.MessageAttributeValue{
-			"a": types.MessageAttributeValue{
-				DataType:    aws.String("String"),
-				StringValue: aws.String("abc"),
-			},
-			"b": types.MessageAttributeValue{
-				DataType:    aws.String("Binary"),
-				BinaryValue: []byte("xyz"),
-			},
-		},
-	}
-	_, err := client.SendMessage(context.TODO(), input)
+	if batchSize > 1 {
+		input := &sqs.SendMessageBatchInput{
+			QueueUrl: aws.String(queueUrl),
+		}
 
-	if err != nil {
-		log.Printf("Failed to send message from goroutine %d, request %d: %v", goroutineID, requestID, err)
+		for i := range batchSize {
+			messageBody := fmt.Sprintf("Message from goroutine %d, request %d, batchId %d %s", goroutineID, requestID, i, GenerateRandomString(2000))
+			input.Entries = append(input.Entries, types.SendMessageBatchRequestEntry{
+				Id:          aws.String(fmt.Sprintf("%d", i)),
+				MessageBody: &messageBody,
+				MessageAttributes: map[string]types.MessageAttributeValue{
+					"a": types.MessageAttributeValue{
+						DataType:    aws.String("String"),
+						StringValue: aws.String("abc"),
+					},
+					"b": types.MessageAttributeValue{
+						DataType:    aws.String("Binary"),
+						BinaryValue: []byte("xyz"),
+					},
+				},
+			})
+		}
+
+		_, err := client.SendMessageBatch(context.TODO(), input)
+
+		if err != nil {
+			log.Printf("Failed to send message from goroutine %d, request %d: %v", goroutineID, requestID, err)
+		}
+
+	} else {
+		messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(2000))
+		input := &sqs.SendMessageInput{
+			QueueUrl:    aws.String(queueUrl),
+			MessageBody: aws.String(messageBody),
+			MessageAttributes: map[string]types.MessageAttributeValue{
+				"a": types.MessageAttributeValue{
+					DataType:    aws.String("String"),
+					StringValue: aws.String("abc"),
+				},
+				"b": types.MessageAttributeValue{
+					DataType:    aws.String("Binary"),
+					BinaryValue: []byte("xyz"),
+				},
+			},
+		}
+		_, err := client.SendMessage(context.TODO(), input)
+
+		if err != nil {
+			log.Printf("Failed to send message from goroutine %d, request %d: %v", goroutineID, requestID, err)
+		}
 	}
 
 	// time.Sleep(100 * time.Millisecond)
@@ -134,10 +169,11 @@ func receiveMessage(client *sqs.Client, queueUrl string, goroutineID int) int {
 	}
 	msgs, err := client.ReceiveMessage(context.TODO(), i)
 	if err != nil {
-		log.Println(err)
+		log.Error().Err(err).Send()
 	}
 
 	for _, msg := range msgs.Messages {
+		log.Trace().Interface("message", msg).Msg("Received message")
 		delInput := &sqs.DeleteMessageInput{
 			QueueUrl:      aws.String(queueUrl),
 			ReceiptHandle: msg.ReceiptHandle,

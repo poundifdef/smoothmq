@@ -124,7 +124,7 @@ func (s *SQS) Stop() error {
 }
 
 func (s *SQS) Action(c *fiber.Ctx) error {
-	log.Trace().Interface("headers", c.GetReqHeaders()).Bytes("body", c.Body()).Send()
+	// log.Trace().Interface("headers", c.GetReqHeaders()).Bytes("body", c.Body()).Send()
 
 	awsMethodHeader, ok := c.GetReqHeaders()["X-Amz-Target"]
 	if !ok {
@@ -142,6 +142,8 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 	switch awsMethod {
 	case "AmazonSQS.SendMessage":
 		return s.SendMessage(c, tenantId)
+	case "AmazonSQS.SendMessageBatch":
+		return s.SendMessageBatch(c, tenantId)
 	case "AmazonSQS.ReceiveMessage":
 		return s.ReceiveMessage(c, tenantId)
 	case "AmazonSQS.DeleteMessage":
@@ -277,9 +279,6 @@ func (s *SQS) GetQueueURL(c *fiber.Ctx, tenantId int64) error {
 }
 
 func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
-	// TODO: make this configurable on queue
-	visibilityTimeout := 30
-
 	req := &SendMessagePayload{}
 
 	err := json.Unmarshal(c.Body(), req)
@@ -322,7 +321,7 @@ func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
 		}
 	}
 
-	messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody, kv, req.DelaySeconds, visibilityTimeout)
+	messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody, kv, req.DelaySeconds)
 	if err != nil {
 		return err
 	}
@@ -333,6 +332,76 @@ func (s *SQS) SendMessage(c *fiber.Ctx, tenantId int64) error {
 	response := SendMessageResponse{
 		MessageId:        fmt.Sprintf("%d", messageId),
 		MD5OfMessageBody: hex.EncodeToString(hasher.Sum(nil)),
+	}
+
+	return c.JSON(response)
+}
+
+func (s *SQS) SendMessageBatch(c *fiber.Ctx, tenantId int64) error {
+	batchReq := &SendMessageBatchRequest{}
+
+	err := json.Unmarshal(c.Body(), batchReq)
+	if err != nil {
+		return err
+	}
+
+	tokens := strings.Split(batchReq.QueueUrl, "/")
+	queue := tokens[len(tokens)-1]
+
+	response := &SendMessageBatchResponse{}
+
+	for _, req := range batchReq.Entries {
+
+		kv := make(map[string]string)
+		for k, v := range req.MessageAttributes {
+			kv[k+"_DataType"] = v.DataType
+			if v.DataType == "String" {
+				kv[k] = v.StringValue
+			} else if v.DataType == "Number" {
+				kv[k] = v.StringValue
+			} else if v.DataType == "Binary" {
+				kv[k] = v.BinaryValue
+			}
+		}
+
+		// Try to parse celery task and ID
+		if s.cfg.ParseCelery {
+			// Is our message a JSON string?
+			if strings.HasPrefix(req.MessageBody, "ey") {
+				jsonStr, err := base64.StdEncoding.DecodeString(req.MessageBody)
+
+				if err == nil {
+					res := gjson.GetBytes(jsonStr, "headers.task")
+					if res.Exists() {
+						kv["celery_task"] = res.Str
+					}
+
+					res = gjson.GetBytes(jsonStr, "headers.id")
+					if res.Exists() {
+						kv["celery_id"] = res.Str
+					}
+				}
+			}
+		}
+
+		messageId, err := s.queue.Enqueue(tenantId, queue, req.MessageBody, kv, req.DelaySeconds)
+
+		if err == nil {
+			hasher := md5.New()
+			hasher.Write([]byte(req.MessageBody))
+
+			response.Successful = append(response.Successful, SendMessageBatchResultEntry{
+				ID:               req.ID,
+				MessageId:        fmt.Sprintf("%d", messageId),
+				MD5OfMessageBody: hex.EncodeToString(hasher.Sum(nil)),
+			})
+		} else {
+			response.Failed = append(response.Failed, BatchResultErrorEntry{
+				ID:      req.ID,
+				Code:    "InternalFailure",
+				Message: err.Error(),
+			})
+		}
 	}
 
 	return c.JSON(response)
@@ -355,7 +424,13 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 	tokens := strings.Split(req.QueueUrl, "/")
 	queue := tokens[len(tokens)-1]
 
-	messages, err := s.queue.Dequeue(tenantId, queue, req.MaxNumberOfMessages)
+	// TODO: make this configurable on queue
+	visibilityTimeout := 30
+	if req.VisibilityTimeout > 0 {
+		visibilityTimeout = req.VisibilityTimeout
+	}
+
+	messages, err := s.queue.Dequeue(tenantId, queue, req.MaxNumberOfMessages, visibilityTimeout)
 	if err != nil {
 		return err
 	}

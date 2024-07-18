@@ -200,7 +200,7 @@ func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
 	return queueId, nil
 }
 
-func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int, requeueIn int) (int64, error) {
+func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error) {
 	// TODO: make some params configurable or a property of the queue
 
 	messageSnow := q.snow.Generate()
@@ -224,8 +224,8 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 	defer tx.Rollback()
 
 	_, err = tx.Exec(
-		"INSERT INTO messages (id ,queue_id , deliver_at , status , tenant_id ,updated_at,message,requeue_in ) VALUES (?,?,?,?,?,?,?,?)",
-		messageId, queueId, 0, models.MessageStatusQueued, tenantId, deliverAt, message, requeueIn)
+		"INSERT INTO messages (id ,queue_id , deliver_at , status , tenant_id ,updated_at,message, requeue_in) VALUES (?,?,?,?,?,?,?,?)",
+		messageId, queueId, 0, models.MessageStatusQueued, tenantId, deliverAt, message, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -247,7 +247,7 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 	return messageId, nil
 }
 
-func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([]*models.Message, error) {
+func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, requeueIn int) ([]*models.Message, error) {
 	queueId, err := q.queueId(tenantId, queue)
 	if err != nil {
 		return nil, err
@@ -299,11 +299,11 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int) ([
 
 	query = `
 	UPDATE messages
-	SET status = ?, updated_at = ?
+	SET status = ?, updated_at = ?, requeue_in = ?
 	WHERE tenant_id = ? AND queue_id = ? AND id IN (?)
 	`
 
-	query, args, err := sqlx.In(query, models.MessageStatusDequeued, now, tenantId, queueId, messageIDs)
+	query, args, err := sqlx.In(query, models.MessageStatusDequeued, now, requeueIn, tenantId, queueId, messageIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +356,11 @@ func (q *SQLiteQueue) Peek(tenantId int64, queue string, messageId int64) *model
 
 	rc := &models.Message{}
 
-	q.db.Get(rc, "SELECT * FROM messages WHERE tenant_id=? AND queue_id=? AND id=?", tenantId, queueId, messageId)
+	err = q.db.Get(rc, "SELECT * FROM messages WHERE tenant_id=? AND queue_id=? AND id=?", tenantId, queueId, messageId)
+	if err != nil {
+		log.Error().Err(err).Interface("message", rc).Msg("Unable to peek")
+	}
+
 	rc.KeyValues = make(map[string]string)
 
 	rows, err := q.db.Queryx("SELECT k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id=?", tenantId, queueId, messageId)
