@@ -104,3 +104,42 @@ type GetQueueURLRequest struct {
 type GetQueueURLResponse struct {
 	QueueURL string `json:"QueueUrl"`
 }
+
+// SendMessageBatchRequest represents the input for the SendMessageBatch operation.
+type SendMessageBatchRequest struct {
+	QueueUrl string                         `json:"QueueUrl"`
+	Entries  []SendMessageBatchRequestEntry `json:"Entries"`
+}
+
+// SendMessageBatchRequestEntry represents an entry in the SendMessageBatch operation.
+type SendMessageBatchRequestEntry struct {
+	ID                     string                           `json:"Id"`
+	MessageBody            string                           `json:"MessageBody"`
+	DelaySeconds           int                              `json:"DelaySeconds,omitempty"`
+	MessageAttributes      map[string]MessageAttributeValue `json:"MessageAttributes,omitempty"`
+	MessageDeduplicationId string                           `json:"MessageDeduplicationId,omitempty"`
+	MessageGroupId         string                           `json:"MessageGroupId,omitempty"`
+}
+
+// SendMessageBatchResponse represents the output for the SendMessageBatch operation.
+type SendMessageBatchResponse struct {
+	Successful []SendMessageBatchResultEntry `json:"Successful"`
+	Failed     []BatchResultErrorEntry       `json:"Failed"`
+}
+
+// SendMessageBatchResultEntry represents a successful entry in the SendMessageBatch operation.
+type SendMessageBatchResultEntry struct {
+	ID                     string `json:"Id"`
+	MessageId              string `json:"MessageId"`
+	MD5OfMessageBody       string `json:"MD5OfMessageBody"`
+	MD5OfMessageAttributes string `json:"MD5OfMessageAttributes,omitempty"`
+	SequenceNumber         string `json:"SequenceNumber,omitempty"`
+}
+
+// BatchResultErrorEntry represents a failed entry in the SendMessageBatch operation.
+type BatchResultErrorEntry struct {
+	ID          string `json:"Id"`
+	SenderFault bool   `json:"SenderFault"`
+	Code        string `json:"Code"`
+	Message     string `json:"Message"`
+}
