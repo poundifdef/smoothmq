@@ -13,7 +13,7 @@ type CLI struct {
 	Tester TesterCommand `cmd:"tester" help:"Run queue test tool"`
 
 	Config kong.ConfigFlag `name:"config" help:"Configuration file"`
-	Log    LogConfig       `embed:"" prefix:"log-" name:"log"`
+	Log    LogConfig       `embed:"" prefix:"log-" name:"log" envprefix:"LOG_"`
 }
 
 type TesterCommand struct {
@@ -31,8 +31,8 @@ type ServerCommand struct {
 }
 
 type LogConfig struct {
-	Pretty bool   `name:"pretty" default:"true"`
-	Level  string `name:"level" enum:"trace,debug,info,warn,error,fatal,panic" default:"debug" help:"Log level"`
+	Pretty bool   `name:"pretty" default:"true" env:"PRETTY"`
+	Level  string `name:"level" enum:"trace,debug,info,warn,error,fatal,panic" default:"debug" help:"Log level" env:"LEVEL"`
 }
 
 type SQLiteConfig struct {
