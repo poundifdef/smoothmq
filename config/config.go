@@ -71,9 +71,11 @@ func (k *AWSKey) Decode(ctx *kong.DecodeContext) error {
 }
 
 type DashboardConfig struct {
-	Enabled bool `name:"enabled" help:"Enable web dashboard" default:"true" env:"ENABLED"`
-	Port    int  `name:"port" help:"HTTP port for dashboard" default:"3000" env:"PORT"`
-	Dev     bool `name:"dev" help:"Run dashboard in dev mode, refresh templates from local" default:"false" env:"DEV"`
+	Enabled bool   `name:"enabled" help:"Enable web dashboard" default:"true" env:"ENABLED"`
+	Port    int    `name:"port" help:"HTTP port for dashboard" default:"3000" env:"PORT"`
+	Dev     bool   `name:"dev" help:"Run dashboard in dev mode, refresh templates from local" default:"false" env:"DEV"`
+	User    string `name:"user" help:"Username for auth" default:"" env:"USER"`
+	Pass    string `name:"pass" help:"Pass for auth" default:"" env:"PASS"`
 }
 
 func Load() (string, *CLI, error) {

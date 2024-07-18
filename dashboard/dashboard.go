@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/basicauth"
 	"github.com/gofiber/template/html/v2"
 )
 
@@ -62,6 +63,14 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg co
 		Views:                 engine,
 		DisableStartupMessage: true,
 	})
+
+	if cfg.User != "" && cfg.Pass != "" {
+		app.Use(basicauth.New(basicauth.Config{
+			Users: map[string]string{
+				cfg.User: cfg.Pass,
+			},
+		}))
+	}
 
 	d := &Dashboard{
 		app:           app,
