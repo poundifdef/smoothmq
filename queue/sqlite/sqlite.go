@@ -244,6 +244,8 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 		return 0, err
 	}
 
+	log.Debug().Int64("message_id", messageId).Msg("Enqueued message")
+
 	return messageId, nil
 }
 
@@ -306,6 +308,10 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, re
 	query, args, err := sqlx.In(query, models.MessageStatusDequeued, now, requeueIn, tenantId, queueId, messageIDs)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, messageId := range messageIDs {
+		log.Debug().Int64("message_id", messageId).Msg("Dequeued message")
 	}
 
 	query = q.db.Rebind(query)
@@ -520,6 +526,10 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	}
 
 	err = tx.Commit()
+
+	if err == nil {
+		log.Debug().Int64("message_id", messageId).Msg("Deleted message")
+	}
 
 	return err
 }

@@ -83,7 +83,7 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
 		Logger: &log.Logger,
-		Levels: []zerolog.Level{zerolog.ErrorLevel, zerolog.WarnLevel, zerolog.DebugLevel},
+		Levels: []zerolog.Level{zerolog.ErrorLevel, zerolog.WarnLevel, zerolog.TraceLevel},
 	}))
 
 	app.Use(s.authMiddleware)
