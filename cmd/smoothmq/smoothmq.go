@@ -2,6 +2,7 @@ package smoothmq
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/poundifdef/smoothmq/queue/sqlite"
 	"github.com/poundifdef/smoothmq/tenants/defaultmanager"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -37,6 +39,14 @@ func Run(command string, cfg *config.CLI, tenantManager models.TenantManager, qu
 	}
 
 	fmt.Println()
+
+	if cfg.Metrics.PrometheusEnabled {
+		fmt.Printf("Prometheus metrics: http://localhost:%d%s\n", cfg.Metrics.PrometheusPort, cfg.Metrics.PrometheusPath)
+		go func() {
+			http.Handle(cfg.Metrics.PrometheusPath, promhttp.Handler())
+			http.ListenAndServe(fmt.Sprintf(":%d", cfg.Metrics.PrometheusPort), nil)
+		}()
+	}
 
 	switch command {
 	case "tester":

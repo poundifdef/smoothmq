@@ -37,13 +37,14 @@ func Run(c smoothCfg.TesterCommand) {
 		config.WithRegion("us-east-1"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, "")),
 	)
-	cfg.BaseEndpoint = &c.SqsEndpoint
 	if err != nil {
 		log.Fatal().Msgf("unable to load SDK config, %v", err)
 	}
 	// cfg.RateLimiter = NoOpRateLimit{}
 
-	sqsClient := sqs.NewFromConfig(cfg)
+	sqsClient := sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+		o.BaseEndpoint = aws.String(c.SqsEndpoint)
+	})
 
 	var wg sync.WaitGroup
 

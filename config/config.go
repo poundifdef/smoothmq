@@ -12,8 +12,9 @@ type CLI struct {
 	Server ServerCommand `cmd:"server" help:"Run queue server"`
 	Tester TesterCommand `cmd:"tester" help:"Run queue test tool"`
 
-	Config kong.ConfigFlag `name:"config" help:"Configuration file"`
-	Log    LogConfig       `embed:"" prefix:"log-" name:"log" envprefix:"LOG_"`
+	Config  kong.ConfigFlag `name:"config" help:"Configuration file"`
+	Log     LogConfig       `embed:"" prefix:"log-" name:"log" envprefix:"LOG_"`
+	Metrics MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"METRICS_"`
 }
 
 type TesterCommand struct {
@@ -32,7 +33,13 @@ type ServerCommand struct {
 
 type LogConfig struct {
 	Pretty bool   `name:"pretty" default:"true" env:"PRETTY"`
-	Level  string `name:"level" enum:"trace,debug,info,warn,error,fatal,panic" default:"debug" help:"Log level" env:"LEVEL"`
+	Level  string `name:"level" enum:"trace,debug,info,warn,error,fatal,panic" default:"info" help:"Log level" env:"LEVEL"`
+}
+
+type MetricsConfig struct {
+	PrometheusEnabled bool   `name:"prometheus-enabled" default:"true" env:"PROMETHEUS_ENABLED"`
+	PrometheusPort    int    `name:"prometheus-port" default:"2112" env:"PROMETHEUS_PORT"`
+	PrometheusPath    string `name:"prometheus-path" default:"/metrics" env:"PROMETHEUS_PATH"`
 }
 
 type SQLiteConfig struct {

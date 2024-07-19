@@ -35,13 +35,13 @@ var queueDiskSize = promauto.NewGauge(
 	},
 )
 
-var queueMessageCount = promauto.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "queue_message_count",
-		Help: "Number of messages in queue",
-	},
-	[]string{"tenant_id", "queue", "status"},
-)
+// var queueMessageCount = promauto.NewGaugeVec(
+// 	prometheus.GaugeOpts{
+// 		Name: "queue_message_count",
+// 		Help: "Number of messages in queue",
+// 	},
+// 	[]string{"tenant_id", "queue", "status"},
+// )
 
 func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 	snow, err := snowflake.NewNode(1)

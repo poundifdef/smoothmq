@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"net/http"
 	"strconv"
@@ -30,11 +31,14 @@ import (
 
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/tidwall/gjson"
 
 	"github.com/gofiber/contrib/fiberzerolog"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/fiber/v2/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
@@ -47,6 +51,23 @@ type SQS struct {
 
 	cfg config.SQSConfig
 }
+
+var requestLatency = promauto.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Name:    "sqs_request_latency",
+		Help:    "Latency of SQS requests",
+		Buckets: prometheus.ExponentialBucketsRange(0.05, 1, 10),
+	},
+	[]string{"tenant_id", "aws_method"},
+)
+
+var requestStatus = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "sqs_request_status",
+		Help: "Status SQS requests",
+	},
+	[]string{"tenant_id", "aws_method", "status"},
+)
 
 func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.SQSConfig) *SQS {
 	s := &SQS{
@@ -62,7 +83,7 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
 		Logger: &log.Logger,
-		Levels: []zerolog.Level{zerolog.ErrorLevel, zerolog.WarnLevel, zerolog.TraceLevel},
+		Levels: []zerolog.Level{zerolog.ErrorLevel, zerolog.WarnLevel, zerolog.DebugLevel},
 	}))
 
 	app.Use(s.authMiddleware)
@@ -124,7 +145,8 @@ func (s *SQS) Stop() error {
 }
 
 func (s *SQS) Action(c *fiber.Ctx) error {
-	// log.Trace().Interface("headers", c.GetReqHeaders()).Bytes("body", c.Body()).Send()
+	log.Trace().Interface("headers", c.GetReqHeaders()).Bytes("body", c.Body()).Send()
+	start := time.Now()
 
 	awsMethodHeader, ok := c.GetReqHeaders()["X-Amz-Target"]
 	if !ok {
@@ -137,31 +159,41 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 
 	tenantId := c.Locals("tenantId").(int64)
 
-	// log.Println(awsMethod)
+	defer func() {
+		requestLatency.WithLabelValues(fmt.Sprintf("%d", tenantId), utils.CopyString(awsMethod)).Observe(time.Since(start).Seconds())
+	}()
 
+	var rc error
 	switch awsMethod {
 	case "AmazonSQS.SendMessage":
-		return s.SendMessage(c, tenantId)
+		rc = s.SendMessage(c, tenantId)
 	case "AmazonSQS.SendMessageBatch":
-		return s.SendMessageBatch(c, tenantId)
+		rc = s.SendMessageBatch(c, tenantId)
 	case "AmazonSQS.ReceiveMessage":
-		return s.ReceiveMessage(c, tenantId)
+		rc = s.ReceiveMessage(c, tenantId)
 	case "AmazonSQS.DeleteMessage":
-		return s.DeleteMessage(c, tenantId)
+		rc = s.DeleteMessage(c, tenantId)
 	case "AmazonSQS.ListQueues":
-		return s.ListQueues(c, tenantId)
+		rc = s.ListQueues(c, tenantId)
 	case "AmazonSQS.GetQueueUrl":
-		return s.GetQueueURL(c, tenantId)
+		rc = s.GetQueueURL(c, tenantId)
 	case "AmazonSQS.CreateQueue":
-		return s.CreateQueue(c, tenantId)
+		rc = s.CreateQueue(c, tenantId)
 	case "AmazonSQS.GetQueueAttributes":
-		return s.GetQueueAttributes(c, tenantId)
+		rc = s.GetQueueAttributes(c, tenantId)
 	case "AmazonSQS.PurgeQueue":
-		return s.PurgeQueue(c, tenantId)
+		rc = s.PurgeQueue(c, tenantId)
 	default:
-		return NewSQSError(400, "UnsupportedOperation", fmt.Sprintf("SQS method %s not implemented", awsMethod))
+		rc = NewSQSError(400, "UnsupportedOperation", fmt.Sprintf("SQS method %s not implemented", awsMethod))
 	}
 
+	status := "ok"
+	if rc != nil {
+		status = "error"
+	}
+	requestStatus.WithLabelValues(fmt.Sprintf("%d", tenantId), utils.CopyString(awsMethod), status).Inc()
+
+	return rc
 }
 
 func (s *SQS) PurgeQueue(c *fiber.Ctx, tenantId int64) error {

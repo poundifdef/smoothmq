@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,8 +10,6 @@ import (
 	"github.com/poundifdef/smoothmq/dashboard"
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/poundifdef/smoothmq/protocols/sqs"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) {
@@ -24,11 +21,6 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 	sqsServer := sqs.NewSQS(queue, tm, cfg.SQS)
 	go func() {
 		sqsServer.Start()
-	}()
-
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(":2112", nil)
 	}()
 
 	c := make(chan os.Signal, 1)
