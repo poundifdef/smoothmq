@@ -12,9 +12,8 @@ type CLI struct {
 	Server ServerCommand `cmd:"server" help:"Run queue server"`
 	Tester TesterCommand `cmd:"tester" help:"Run queue test tool"`
 
-	Config  kong.ConfigFlag `name:"config" help:"Configuration file"`
-	Log     LogConfig       `embed:"" prefix:"log-" name:"log" envprefix:"LOG_"`
-	Metrics MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"METRICS_"`
+	Config kong.ConfigFlag `name:"config" help:"Configuration file"`
+	Log    LogConfig       `embed:"" prefix:"log-" name:"log" envprefix:"LOG_"`
 }
 
 type TesterCommand struct {
@@ -29,6 +28,10 @@ type ServerCommand struct {
 	SQS       SQSConfig       `embed:"" prefix:"sqs-" envprefix:"Q_SQS_"`
 	Dashboard DashboardConfig `embed:"" prefix:"dashboard-" envprefix:"Q_DASHBOARD_"`
 	SQLite    SQLiteConfig    `embed:"" prefix:"sqlite-" envprefix:"Q_SQLITE_"`
+	Metrics   MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"Q_METRICS_"`
+
+	UseSinglePort bool `name:"use-single-port" default:"false" env:"Q_SERVER_USE_SINGLE_PORT" help:"Enables having all HTTP services run on a single port with different endpoints"`
+	Port          int  `name:"port" default:"8080" env:"PORT" help:"If use-single-port is enabled, this is the port number for the server"`
 }
 
 type LogConfig struct {

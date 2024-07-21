@@ -1,8 +1,6 @@
 package smoothmq
 
 import (
-	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,9 +9,6 @@ import (
 	"github.com/poundifdef/smoothmq/cmd/smoothmq/tester"
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
-	"github.com/poundifdef/smoothmq/queue/sqlite"
-	"github.com/poundifdef/smoothmq/tenants/defaultmanager"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -28,24 +23,6 @@ func Run(command string, cfg *config.CLI, tenantManager models.TenantManager, qu
 	log.Logger = zerolog.New(os.Stderr).With().Timestamp().Caller().Logger().Level(logLevel)
 	if cfg.Log.Pretty {
 		log.Logger = log.Logger.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	}
-
-	if tenantManager == nil {
-		tenantManager = defaultmanager.NewDefaultTenantManager(cfg.Server.SQS.Keys)
-	}
-
-	if queue == nil {
-		queue = sqlite.NewSQLiteQueue(cfg.Server.SQLite)
-	}
-
-	fmt.Println()
-
-	if cfg.Metrics.PrometheusEnabled {
-		fmt.Printf("Prometheus metrics: http://localhost:%d%s\n", cfg.Metrics.PrometheusPort, cfg.Metrics.PrometheusPath)
-		go func() {
-			http.Handle(cfg.Metrics.PrometheusPath, promhttp.Handler())
-			http.ListenAndServe(fmt.Sprintf(":%d", cfg.Metrics.PrometheusPort), nil)
-		}()
 	}
 
 	switch command {

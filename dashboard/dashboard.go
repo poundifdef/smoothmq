@@ -25,7 +25,8 @@ import (
 var viewsfs embed.FS
 
 type Dashboard struct {
-	app           *fiber.App
+	App *fiber.App
+
 	queue         models.Queue
 	tenantManager models.TenantManager
 
@@ -73,7 +74,7 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg co
 	}
 
 	d := &Dashboard{
-		app:           app,
+		App:           app,
 		queue:         queue,
 		tenantManager: tenantManager,
 		cfg:           cfg,
@@ -94,12 +95,12 @@ func (d *Dashboard) Start() error {
 	}
 
 	fmt.Printf("Dashboard: http://localhost:%d\n", d.cfg.Port)
-	return d.app.Listen(fmt.Sprintf(":%d", d.cfg.Port))
+	return d.App.Listen(fmt.Sprintf(":%d", d.cfg.Port))
 }
 
 func (d *Dashboard) Stop() error {
 	if d.cfg.Enabled {
-		return d.app.Shutdown()
+		return d.App.Shutdown()
 	}
 
 	return nil

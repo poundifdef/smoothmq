@@ -35,6 +35,7 @@ func NewDefaultTenantManager(cfg []config.AWSKey) models.TenantManager {
 			fmt.Println("Development SQS credentials:")
 			fmt.Println("    Access Key: " + key.AccessKey)
 			fmt.Println("    Secret Key: " + key.SecretKey)
+			fmt.Println()
 		}
 	}
 

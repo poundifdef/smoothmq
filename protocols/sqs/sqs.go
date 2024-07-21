@@ -45,7 +45,7 @@ import (
 )
 
 type SQS struct {
-	app           *fiber.App
+	App           *fiber.App
 	queue         models.Queue
 	tenantManager models.TenantManager
 
@@ -89,7 +89,7 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 	app.Use(s.authMiddleware)
 	app.Post("/*", s.Action)
 
-	s.app = app
+	s.App = app
 
 	return s
 }
@@ -134,12 +134,12 @@ func (s *SQS) Start() error {
 	}
 
 	fmt.Printf("SQS Endpoint: http://localhost:%d\n", s.cfg.Port)
-	return s.app.Listen(fmt.Sprintf(":%d", s.cfg.Port))
+	return s.App.Listen(fmt.Sprintf(":%d", s.cfg.Port))
 }
 
 func (s *SQS) Stop() error {
 	if s.cfg.Enabled {
-		return s.app.Shutdown()
+		return s.App.Shutdown()
 	}
 	return nil
 }
