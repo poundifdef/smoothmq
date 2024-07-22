@@ -64,18 +64,18 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 		})
 
 		if cfg.Dashboard.Enabled {
-			app.Mount("/dashboard", dashboardServer.App)
-			fmt.Printf("Dashboard http://localhost:%d/dashboard\n", cfg.Port)
+			app.Mount("/", dashboardServer.App)
+			fmt.Printf("Dashboard http://localhost:%d\n", cfg.Port)
+		}
+
+		if cfg.SQS.Enabled {
+			app.Mount("/sqs", sqsServer.App)
+			fmt.Printf("SQS Endpoint http://localhost:%d/sqs\n", cfg.Port)
 		}
 
 		if cfg.Metrics.PrometheusEnabled {
 			app.Group("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 			fmt.Printf("Prometheus http://localhost:%d/metrics\n", cfg.Port)
-		}
-
-		if cfg.SQS.Enabled {
-			app.Mount("/", sqsServer.App)
-			fmt.Printf("SQS Endpoint http://localhost:%d\n", cfg.Port)
 		}
 
 		go func() {

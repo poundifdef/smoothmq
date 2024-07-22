@@ -17,7 +17,7 @@ type CLI struct {
 }
 
 type TesterCommand struct {
-	SqsEndpoint string `help:"SQS endpoint" name:"endpoint" default:"http://localhost:8080"`
+	SqsEndpoint string `help:"SQS endpoint" name:"endpoint" default:"http://localhost:3001"`
 	Senders     int    `help:"" default:"0"`
 	Receivers   int    `help:"" default:"0"`
 	Messages    int    `help:"" default:"0"`
@@ -30,7 +30,7 @@ type ServerCommand struct {
 	SQLite    SQLiteConfig    `embed:"" prefix:"sqlite-" envprefix:"Q_SQLITE_"`
 	Metrics   MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"Q_METRICS_"`
 
-	UseSinglePort bool `name:"use-single-port" default:"true" env:"Q_SERVER_USE_SINGLE_PORT" help:"Enables having all HTTP services run on a single port with different endpoints"`
+	UseSinglePort bool `name:"use-single-port" default:"false" env:"Q_SERVER_USE_SINGLE_PORT" help:"Enables having all HTTP services run on a single port with different endpoints"`
 	Port          int  `name:"port" default:"8080" env:"PORT" help:"If use-single-port is enabled, this is the port number for the server"`
 }
 
