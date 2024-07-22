@@ -50,10 +50,11 @@ type SQLiteConfig struct {
 }
 
 type SQSConfig struct {
-	Enabled     bool     `name:"enabled" default:"true" help:"Enable SQS protocol for queue" env:"ENABLED"`
-	Port        int      `name:"port" default:"3001" help:"HTTP port for SQS protocol" env:"PORT"`
-	Keys        []AWSKey `name:"keys" default:"DEV_ACCESS_KEY_ID:DEV_SECRET_ACCESS_KEY" env:"KEYS"`
-	ParseCelery bool     `name:"parse-celery" default:"true" env:"PARSE_CELERY" help:"Parse Celery messages. Lets you search by celery message ID and task type."`
+	Enabled        bool     `name:"enabled" default:"true" help:"Enable SQS protocol for queue" env:"ENABLED"`
+	Port           int      `name:"port" default:"3001" help:"HTTP port for SQS protocol" env:"PORT"`
+	Keys           []AWSKey `name:"keys" default:"DEV_ACCESS_KEY_ID:DEV_SECRET_ACCESS_KEY" env:"KEYS"`
+	ParseCelery    bool     `name:"parse-celery" default:"true" env:"PARSE_CELERY" help:"Parse Celery messages. Lets you search by celery message ID and task type."`
+	MaxRequestSize int      `name:"max-request-size" default:"1048576" env:"MAX_REQUEST_SIZE" help:"Max size of SQS request in bytes"`
 }
 
 type AWSKey struct {

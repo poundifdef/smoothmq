@@ -79,6 +79,7 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 		ErrorHandler:          s.errorHandler,
+		BodyLimit:             cfg.MaxRequestSize,
 	})
 
 	app.Use(fiberzerolog.New(fiberzerolog.Config{
