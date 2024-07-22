@@ -16,7 +16,7 @@ SmoothMQ deploys as a single go binary and can be used by any existing SQS clien
 
 ## Running
 
-This will run a UI on `:3000` and an SQS-compatible server on `:3001`.
+This will run the server on `:8080`
 
 ```
 $ go run . server
@@ -32,14 +32,14 @@ This works with any SQS client in any language.
 import boto3
 
 # Simply change the endpoint_url
-sqs = boto3.client("sqs", ..., endpoint_url="http://localhost:3001")
+sqs = boto3.client("sqs", ..., endpoint_url="http://localhost:8080")
 sqs.send_message(QueueUrl="...", MessageBody="hello world")
 ```
 
 Celery works seamlessly:
 
 ``` py
-app = Celery("tasks", broker_url="sqs://...@localhost:3001")
+app = Celery("tasks", broker_url="sqs://...@localhost:8080")
 ```
 
 ## UI
