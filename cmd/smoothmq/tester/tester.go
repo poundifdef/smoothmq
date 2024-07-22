@@ -77,7 +77,7 @@ func Run(c smoothCfg.TesterCommand) {
 			if sentMessages > 0 {
 				pct = float64(receivedMessages) / float64(sentMessages)
 			}
-			log.Printf("sent: %d, received: %d, pct: %f", sentMessages, receivedMessages, pct)
+			log.Info().Msg(fmt.Sprintf("sent: %d, received: %d, pct: %f", sentMessages, receivedMessages, pct))
 			time.Sleep(1 * time.Second)
 		}
 	}()
@@ -85,7 +85,7 @@ func Run(c smoothCfg.TesterCommand) {
 	wg.Wait()
 
 	if c.Senders > 0 {
-		log.Printf("All messages sent")
+		log.Info().Msg("All messages sent")
 		if c.Receivers == 0 {
 			os.Exit(0)
 		}
