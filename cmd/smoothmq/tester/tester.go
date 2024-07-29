@@ -109,11 +109,11 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 				Id:          aws.String(fmt.Sprintf("%d", i)),
 				MessageBody: &messageBody,
 				MessageAttributes: map[string]types.MessageAttributeValue{
-					"a": types.MessageAttributeValue{
+					"a": {
 						DataType:    aws.String("String"),
 						StringValue: aws.String("abc"),
 					},
-					"b": types.MessageAttributeValue{
+					"b": {
 						DataType:    aws.String("Binary"),
 						BinaryValue: []byte("xyz"),
 					},
@@ -133,11 +133,11 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 			QueueUrl:    aws.String(queueUrl),
 			MessageBody: aws.String(messageBody),
 			MessageAttributes: map[string]types.MessageAttributeValue{
-				"a": types.MessageAttributeValue{
+				"a": {
 					DataType:    aws.String("String"),
 					StringValue: aws.String("abc"),
 				},
-				"b": types.MessageAttributeValue{
+				"b": {
 					DataType:    aws.String("Binary"),
 					BinaryValue: []byte("xyz"),
 				},
