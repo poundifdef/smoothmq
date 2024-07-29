@@ -112,7 +112,11 @@ func (d *Dashboard) Queues(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	tenantId := d.tenantManager.GetTenant(r)
+
+	tenantId, err := d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
 
 	type QueueDetails struct {
 		Name  string
@@ -148,7 +152,12 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	tenantId := d.tenantManager.GetTenant(r)
+
+	tenantId, err := d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
+
 	queueStats := d.queue.Stats(tenantId, queueName)
 
 	filterCriteria := models.FilterCriteria{
@@ -190,7 +199,11 @@ func (d *Dashboard) Message(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	tenantId := d.tenantManager.GetTenant(r)
+
+	tenantId, err := d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
 
 	// TODO: check for errors
 	messageIdInt, err := strconv.ParseInt(messageID, 10, 64)
@@ -214,7 +227,11 @@ func (d *Dashboard) NewQueue(c *fiber.Ctx) error {
 		return err
 	}
 
-	tenantId := d.tenantManager.GetTenant(r)
+	tenantId, err := d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
+
 	err = d.queue.CreateQueue(tenantId, queueName)
 
 	if err != nil {
@@ -231,7 +248,10 @@ func (d *Dashboard) DeleteQueue(c *fiber.Ctx) error {
 		return err
 	}
 
-	tenantId := d.tenantManager.GetTenant(r)
+	tenantId, err := d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
 
 	err = d.queue.DeleteQueue(tenantId, queueName)
 	if err != nil {
