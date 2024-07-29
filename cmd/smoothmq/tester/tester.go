@@ -137,8 +137,9 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 	} else {
 		messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(2000))
 		input := &sqs.SendMessageInput{
-			QueueUrl:    aws.String(queueUrl),
-			MessageBody: aws.String(messageBody),
+			QueueUrl:     aws.String(queueUrl),
+			MessageBody:  aws.String(messageBody),
+			DelaySeconds: *aws.Int32(3600),
 			MessageAttributes: map[string]types.MessageAttributeValue{
 				"a": types.MessageAttributeValue{
 					DataType:    aws.String("String"),

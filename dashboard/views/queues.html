@@ -7,7 +7,7 @@
 <form method="POST" action="/queues">
     <div class="ui action input">
         <input type="text" name="queue" placeholder="new-queue-name">
-        <button class="ui button">Create Queue</button>
+        <button class="ui secondary button">Create Queue</button>
     </div>
 </form>
 
@@ -26,9 +26,13 @@
             <td><a href="/queues/{{.Name}}">{{.Name}}</a></td>
             <td> {{.Count}}</td>
             <td>
-                <form method="post" action="/queues/{{.Name}}/delete" style="display:inline;">
-                    <button class="ui mini negative basic button">Delete</button>
-                </form>
+                <a class="ui mini basic button" href="/queues/{{.Name}}/settings"><i class="cog icon"></i> Settings</a>
+                <button class="ui mini basic button"><i class="pause icon"></i> Pause</button>
+                <a class="ui mini basic button" href="/queues/{{.Name}}/delete"><i class="trash icon"></i> Delete</a>
+
+                <!-- <form method="post" action="/queues/{{.Name}}/delete" style="display:inline;">
+                    <button class="ui mini primary basic button">Settings</button>
+                </form> -->
             </td>
         </tr>
         {{end}}

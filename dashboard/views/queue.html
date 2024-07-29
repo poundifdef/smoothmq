@@ -1,6 +1,16 @@
 <h1>Queue: {{.Queue}}</h1>
 
+
 <div class="ui grid">
+
+
+    <!-- <div class="sixteen wide column">
+        <div class="ui pointing secondary menu">
+            <a class="item">Messages</a>
+            <a class="item">Settings</a>
+        </div>
+        </div> -->
+
     <div class="sixteen wide column">
         <div class="ui statistics">
             <div class="ui small statistic">
@@ -21,6 +31,16 @@
             </div>
         </div>
     </div>
+
+    <div class="sixteen wide column">
+        <a class="ui mini primary basic button" href="/queues/{{.Queue}}/settings"><i class="cog icon"></i> Settings</a>
+
+        <!-- <div class="ui pointing secondary menu">
+            <a class="active item" data-tab="first">Messages</a>
+            <a class="item" data-tab="third">Settings</a>
+          </div> -->
+    </div>
+
     <div class="sixteen wide column">
         <p>Search for a specific message by ID, or filter based on key/value pairs.</p>
         <form method="GET" action="/queues/{{.Queue}}">
@@ -47,10 +67,15 @@
                 <td valign="top">{{.Status}}</td>
                 <td valign="top">
                     {{range $k, $v := .KeyValues}}
-                    <b>{{$k}}:</b> {{$v}}
+                    <b>{{$k}}:</b> <nobr>{{$v}}</nobr>
+                    <br>
+                    <br>
                     {{end}}
                 </td>
-                <td style="word-break: break-word;" valign="top">{{printf "%s" .Message}}</td>
+                <td style="word-break: break-word;" valign="top">
+                    <!-- {{printf "%s" .Message}} -->
+                    {{b64Json .Message}}
+                </td>
               </tr>
             {{end}}
             </tbody>

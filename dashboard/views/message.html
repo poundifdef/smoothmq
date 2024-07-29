@@ -1,6 +1,9 @@
 <h1>Queue {{.Queue}}</h1>
 <h2>Message {{.Message.ID}}</h2>
 
+<button class="ui mini primary basic button"><i class="pause icon"></i> Pause Message</button>
+<button class="ui mini negative basic button"><i class="trash icon"></i> Delete Message</button>
+
 <table class="ui celled table">
     <tbody>
     <tr>
@@ -11,7 +14,7 @@
         <td>k/v</td>
         <td>
             {{range $k, $v := .Message.KeyValues}}
-            {{$k}}: {{$v}}
+            <b>{{$k}}:</b> {{$v}}
             {{end}}
         </td>
     </tr>
@@ -21,7 +24,10 @@
     </tr>
     <tr>
         <td>Message</td>
-        <td style="word-break: break-word;">{{printf "%s" .Message.Message}}</td>
+        <td style="word-break: break-word;">
+            <!-- {{printf "%s" .Message.Message}} -->
+             {{b64Json .Message.Message}}
+        </td>
     </tr>
     </tbody>
 
