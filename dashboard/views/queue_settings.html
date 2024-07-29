@@ -1,0 +1,25 @@
+<h1>Queue: {{.Queue}}</h1>
+
+
+<form class="ui form">
+    <div class="field">
+      <label>Rate Limit (messages/second)</label>
+      <input type="text" name="last-name" placeholder="No Limit">
+    </div>
+    <div class="field">
+        <label>Max Retries (how many times will we requeue message before failing)</label>
+        <input type="text" name="last-name" placeholder="0">
+    </div>
+    <div class="field">
+        <label>Message Timeout (seconds before message is requeued)</label>
+        <input type="text" name="last-name" placeholder="30">
+    </div>
+    <div class="field">
+      <div class="ui checkbox">
+        <input type="checkbox" tabindex="0">
+        <label>Paused (stop sending messages to consumers)</label>
+      </div>
+    </div>
+    <button class="ui button" type="submit">Save</button>
+  </form>
+

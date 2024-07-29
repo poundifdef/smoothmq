@@ -202,6 +202,7 @@ func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
 
 func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error) {
 	// TODO: make some params configurable or a property of the queue
+	requeueIn := 30
 
 	messageSnow := q.snow.Generate()
 	messageId := messageSnow.Int64()
@@ -225,7 +226,7 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 
 	_, err = tx.Exec(
 		"INSERT INTO messages (id ,queue_id , deliver_at , status , tenant_id ,updated_at,message, requeue_in) VALUES (?,?,?,?,?,?,?,?)",
-		messageId, queueId, 0, models.MessageStatusQueued, tenantId, deliverAt, message, 0)
+		messageId, queueId, deliverAt, models.MessageStatusQueued, tenantId, now, message, requeueIn)
 	if err != nil {
 		return 0, err
 	}
