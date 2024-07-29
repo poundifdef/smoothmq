@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/basicauth"
 	"github.com/gofiber/template/html/v2"
 )
@@ -107,7 +108,11 @@ func (d *Dashboard) Stop() error {
 }
 
 func (d *Dashboard) Queues(c *fiber.Ctx) error {
-	tenantId := d.tenantManager.GetTenant()
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
+	tenantId := d.tenantManager.GetTenant(r)
 
 	type QueueDetails struct {
 		Name  string
@@ -139,7 +144,11 @@ func (d *Dashboard) Queues(c *fiber.Ctx) error {
 func (d *Dashboard) Queue(c *fiber.Ctx) error {
 	queueName := c.Params("queue")
 
-	tenantId := d.tenantManager.GetTenant()
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
+	tenantId := d.tenantManager.GetTenant(r)
 	queueStats := d.queue.Stats(tenantId, queueName)
 
 	filterCriteria := models.FilterCriteria{
@@ -177,7 +186,11 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 func (d *Dashboard) Message(c *fiber.Ctx) error {
 	queueName := c.Params("queue")
 	messageID := c.Params("message")
-	tenantId := d.tenantManager.GetTenant()
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
+	tenantId := d.tenantManager.GetTenant(r)
 
 	// TODO: check for errors
 	messageIdInt, err := strconv.ParseInt(messageID, 10, 64)
@@ -196,8 +209,13 @@ func (d *Dashboard) Message(c *fiber.Ctx) error {
 func (d *Dashboard) NewQueue(c *fiber.Ctx) error {
 	queueName := c.FormValue("queue")
 
-	tenantId := d.tenantManager.GetTenant()
-	err := d.queue.CreateQueue(tenantId, queueName)
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
+
+	tenantId := d.tenantManager.GetTenant(r)
+	err = d.queue.CreateQueue(tenantId, queueName)
 
 	if err != nil {
 		return err
@@ -208,9 +226,14 @@ func (d *Dashboard) NewQueue(c *fiber.Ctx) error {
 
 func (d *Dashboard) DeleteQueue(c *fiber.Ctx) error {
 	queueName := c.Params("queue")
-	tenantId := d.tenantManager.GetTenant()
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
 
-	err := d.queue.DeleteQueue(tenantId, queueName)
+	tenantId := d.tenantManager.GetTenant(r)
+
+	err = d.queue.DeleteQueue(tenantId, queueName)
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package defaultmanager
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
@@ -12,7 +13,7 @@ type DefaultTenantManager struct {
 	keys map[string]string
 }
 
-func (tm *DefaultTenantManager) GetTenant() int64 {
+func (tm *DefaultTenantManager) GetTenant(r *http.Request) int64 {
 	return 1
 }
 
