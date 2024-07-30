@@ -448,8 +448,9 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 		return err
 	}
 
-	if req.MaxNumberOfMessages == 0 {
-		req.MaxNumberOfMessages = 1
+	maxNumberOfMessages := req.MaxNumberOfMessages
+	if maxNumberOfMessages == 0 {
+		maxNumberOfMessages = 1
 	}
 
 	// log.Println(req)
@@ -463,9 +464,27 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 		visibilityTimeout = req.VisibilityTimeout
 	}
 
-	messages, err := s.queue.Dequeue(tenantId, queue, req.MaxNumberOfMessages, visibilityTimeout)
-	if err != nil {
-		return err
+	var messages []*models.Message
+
+	waitTime := min(req.WaitTimeSeconds, s.cfg.MaxDelaySeconds)
+	maxRequestTime := time.Now().Add(time.Duration(waitTime) * time.Second)
+	sleepIncrement := time.Duration(s.cfg.DelayRetryMillis) * time.Millisecond
+
+	for {
+		messages, err = s.queue.Dequeue(tenantId, queue, maxNumberOfMessages, visibilityTimeout)
+		if err != nil {
+			return err
+		}
+
+		if len(messages) > 0 {
+			break
+		}
+
+		if time.Now().Equal(maxRequestTime) || time.Now().After(maxRequestTime) {
+			break
+		}
+
+		time.Sleep(sleepIncrement)
 	}
 
 	response := ReceiveMessageResponse{
