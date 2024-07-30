@@ -17,13 +17,14 @@ type CLI struct {
 }
 
 type TesterCommand struct {
-	SqsEndpoint string `help:"SQS endpoint" name:"endpoint" default:"http://localhost:3001"`
-	Senders     int    `help:"" default:"0"`
-	Receivers   int    `help:"" default:"0"`
-	Messages    int    `help:"" default:"0"`
-	BatchSize   int    `help:"" default:"1"`
-	AccessKey   string `help:"" default:"DEV_ACCESS_KEY_ID"`
-	SecretKey   string `help:"" default:"DEV_SECRET_ACCESS_KEY"`
+	SqsEndpoint  string `help:"SQS endpoint" name:"endpoint" default:"http://localhost:3001"`
+	Senders      int    `help:"" default:"0"`
+	Receivers    int    `help:"" default:"0"`
+	Messages     int    `help:"" default:"0"`
+	BatchSize    int    `help:"" default:"1"`
+	DelaySeconds int    `help:"" default:"0"`
+	AccessKey    string `help:"" default:"DEV_ACCESS_KEY_ID"`
+	SecretKey    string `help:"" default:"DEV_SECRET_ACCESS_KEY"`
 }
 
 type ServerCommand struct {
