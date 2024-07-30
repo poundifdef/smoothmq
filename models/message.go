@@ -41,7 +41,12 @@ type Message struct {
 	KeyValues map[string]string
 }
 
-func (m Message) Base64Decode() []byte {
+func (m *Message) IsB64() bool {
+	_, err := base64.StdEncoding.DecodeString(string(m.Message))
+	return err == nil
+}
+
+func (m *Message) Base64Decode() []byte {
 	data, err := base64.StdEncoding.DecodeString(string(m.Message))
 	if err != nil {
 		return m.Message
@@ -50,6 +55,6 @@ func (m Message) Base64Decode() []byte {
 	return data
 }
 
-func (m Message) IsJSON() bool {
+func (m *Message) IsJSON() bool {
 	return json.Valid(m.Message)
 }

@@ -84,6 +84,7 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg co
 	app.Get("/", d.Queues)
 	app.Post("/queues", d.NewQueue)
 	app.Get("/queues/:queue", d.Queue)
+	app.Get("/queues/:queue/settings", d.QueueSettings)
 	app.Post("/queues/:queue/delete", d.DeleteQueue)
 	app.Get("/queues/:queue/messages/:message", d.Message)
 
@@ -190,6 +191,22 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 	}
 
 	return c.Render("queue", fiber.Map{"Queue": queueName, "Stats": queueStats, "Messages": messages, "Filter": filterString}, "layout")
+}
+
+func (d *Dashboard) QueueSettings(c *fiber.Ctx) error {
+	queueName := c.Params("queue")
+
+	// r, err := adaptor.ConvertRequest(c, false)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// tenantId, err := d.tenantManager.GetTenant(r)
+	// if err != nil {
+	// 	return err
+	// }
+
+	return c.Render("queue_settings", fiber.Map{"Queue": queueName}, "layout")
 }
 
 func (d *Dashboard) Message(c *fiber.Ctx) error {

@@ -48,7 +48,7 @@ func Run(c smoothCfg.TesterCommand) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < c.Messages; j += c.BatchSize {
-				sendMessage(sqsClient, queueUrl, id, j, c.BatchSize)
+				sendMessage(sqsClient, queueUrl, id, j, c.BatchSize, c.DelaySeconds)
 				sentMessages += 1
 			}
 		}(i)
@@ -96,7 +96,7 @@ func GenerateRandomString(n int) string {
 	return string(b)
 }
 
-func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, batchSize int) {
+func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, batchSize, delaySeconds int) {
 
 	if batchSize > 1 {
 		input := &sqs.SendMessageBatchInput{
@@ -130,8 +130,9 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 	} else {
 		messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(2000))
 		input := &sqs.SendMessageInput{
-			QueueUrl:    aws.String(queueUrl),
-			MessageBody: aws.String(messageBody),
+			QueueUrl:     aws.String(queueUrl),
+			MessageBody:  aws.String(messageBody),
+			DelaySeconds: *aws.Int32(int32(delaySeconds)),
 			MessageAttributes: map[string]types.MessageAttributeValue{
 				"a": {
 					DataType:    aws.String("String"),
