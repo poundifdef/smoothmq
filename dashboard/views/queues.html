@@ -31,13 +31,13 @@
             <td><a href="/queues/{{.Name}}">{{.Name}}</a></td>
             <td> {{.Count}}</td>
             <td>
-                <a class="ui mini basic button" href="/queues/{{.Name}}/settings"><i class="cog icon"></i> Settings</a>
+                <!-- <a class="ui mini basic button" href="/queues/{{.Name}}/settings"><i class="cog icon"></i> Settings</a>
                 <button class="ui mini basic button"><i class="pause icon"></i> Pause</button>
-                <a class="ui mini basic button" href="/queues/{{.Name}}/delete"><i class="trash icon"></i> Delete</a>
+                <a class="ui mini basic button" href="/queues/{{.Name}}/delete"><i class="trash icon"></i> Delete</a> -->
 
-                <!-- <form method="post" action="/queues/{{.Name}}/delete" style="display:inline;">
-                    <button class="ui mini primary basic button">Settings</button>
-                </form> -->
+                <form method="post" action="/queues/{{.Name}}/delete" style="display:inline;">
+                    <button class="ui mini negative basic button">Delete</button>
+                </form>
             </td>
         </tr>
         {{end}}
