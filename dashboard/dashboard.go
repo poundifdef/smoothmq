@@ -196,7 +196,15 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 func (d *Dashboard) QueueSettings(c *fiber.Ctx) error {
 	queueName := c.Params("queue")
 
-	// tenantId := d.tenantManager.GetTenant()
+	// r, err := adaptor.ConvertRequest(c, false)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// tenantId, err := d.tenantManager.GetTenant(r)
+	// if err != nil {
+	// 	return err
+	// }
 
 	return c.Render("queue_settings", fiber.Map{"Queue": queueName}, "layout")
 }
