@@ -21,21 +21,14 @@ import (
 )
 
 func Run(c smoothCfg.TesterCommand) {
-
-	// BaseEndpoint := "https://smoothmq-sqs.fly.dev"
-
 	var sentMessages, receivedMessages int
-
-	// Hardcoded AWS credentials
-	awsAccessKeyID := "DEV_ACCESS_KEY_ID"
-	awsSecretAccessKey := "DEV_SECRET_ACCESS_KEY"
 
 	queueUrl := "https://sqs.us-east-1.amazonaws.com/123/test-queue"
 
 	// Load the AWS configuration with hardcoded credentials
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("us-east-1"),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, "")),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(c.AccessKey, c.SecretKey, "")),
 	)
 	if err != nil {
 		log.Fatal().Msgf("unable to load SDK config, %v", err)
@@ -116,11 +109,11 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 				Id:          aws.String(fmt.Sprintf("%d", i)),
 				MessageBody: &messageBody,
 				MessageAttributes: map[string]types.MessageAttributeValue{
-					"a": types.MessageAttributeValue{
+					"a": {
 						DataType:    aws.String("String"),
 						StringValue: aws.String("abc"),
 					},
-					"b": types.MessageAttributeValue{
+					"b": {
 						DataType:    aws.String("Binary"),
 						BinaryValue: []byte("xyz"),
 					},
@@ -141,11 +134,11 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 			MessageBody:  aws.String(messageBody),
 			DelaySeconds: *aws.Int32(3600),
 			MessageAttributes: map[string]types.MessageAttributeValue{
-				"a": types.MessageAttributeValue{
+				"a": {
 					DataType:    aws.String("String"),
 					StringValue: aws.String("abc"),
 				},
-				"b": types.MessageAttributeValue{
+				"b": {
 					DataType:    aws.String("Binary"),
 					BinaryValue: []byte("xyz"),
 				},

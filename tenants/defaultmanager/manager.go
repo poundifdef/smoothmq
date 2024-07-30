@@ -3,6 +3,7 @@ package defaultmanager
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
@@ -12,8 +13,8 @@ type DefaultTenantManager struct {
 	keys map[string]string
 }
 
-func (tm *DefaultTenantManager) GetTenant() int64 {
-	return 1
+func (tm *DefaultTenantManager) GetTenant(r *http.Request) (int64, error) {
+	return 1, nil
 }
 
 func (tm *DefaultTenantManager) GetAWSSecretKey(accessKey string, region string) (int64, string, error) {

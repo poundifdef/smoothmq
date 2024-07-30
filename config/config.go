@@ -22,6 +22,8 @@ type TesterCommand struct {
 	Receivers   int    `help:"" default:"0"`
 	Messages    int    `help:"" default:"0"`
 	BatchSize   int    `help:"" default:"1"`
+	AccessKey   string `help:"" default:"DEV_ACCESS_KEY_ID"`
+	SecretKey   string `help:"" default:"DEV_SECRET_ACCESS_KEY"`
 }
 
 type ServerCommand struct {
