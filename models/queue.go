@@ -21,7 +21,7 @@ type FilterCriteria struct {
 }
 
 type Queue interface {
-	CreateQueue(tenantId int64, queue string) error
+	CreateQueue(tenantId int64, queue string, visibilityTimeout int) error
 	DeleteQueue(tenantId int64, queue string) error
 	ListQueues(tenantId int64) ([]string, error)
 

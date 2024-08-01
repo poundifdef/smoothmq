@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"strings"
@@ -35,6 +36,17 @@ var queueDiskSize = promauto.NewGauge(
 	},
 )
 
+type Queue struct {
+	ID                int64 `db:"id"`
+	TenantID          int64 `db:"tenant_id"`
+	Name              int64 `db:"name"`
+	RateLimit         int64 `db:"rate_limit"`
+	Paused            bool  `db:"paused"`
+	MaxRetries        int64 `db:"max_retries"`
+	Backoff           int64 `db:"backoff"`
+	VisibilityTimeout int64 `db:"visibility_timeout"`
+}
+
 // var queueMessageCount = promauto.NewGaugeVec(
 // 	prometheus.GaugeOpts{
 // 		Name: "queue_message_count",
@@ -66,23 +78,29 @@ func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 		}
 
 		// TODO: check for errors
-		tx.Exec("CREATE TABLE queues (id integer primary key ,name string, tenant_id integer)")
-		tx.Exec(`
+		tx.Exec("CREATE TABLE queues (id integer primary key, name string, tenant_id integer, rate_limit integer, paused integer, max_retries integer, backoff integer, visibility_timeout integer)")
+		_, err = tx.Exec(`
 		CREATE TABLE messages 
 		(
-			id integer primary key ,queue_id integer, deliver_at integer, status integer, tenant_id integer,updated_at integer,requeue_in integer, message string,
-			FOREIGN KEY(queue_id) REFERENCES queues(id) ON DELETE CASCADE
+			id integer primary key not null,
+			tenant_id integer not null,
+			queue_id integer not null,
+			
+			deliver_at integer not null, 
+			delivered_at integer not null,
+			tries integer not null default 0,
+			max_tries integer not null default 1,
+			requeue_in integer not null,
+
+			message string
 		)
 		`)
 		tx.Exec(`
 		CREATE TABLE kv 
-		(tenant_id integer, queue_id integer, message_id integer ,k string, v string,
-		FOREIGN KEY(queue_id) REFERENCES queues(id) ON DELETE CASCADE,
-		FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
-	)
+		(tenant_id integer, queue_id integer, message_id integer ,k string, v string)
 		`)
 		tx.Exec("CREATE UNIQUE INDEX idx_queues on queues (tenant_id,name);")
-		tx.Exec("CREATE INDEX idx_messages on messages (tenant_id, queue_id, status, deliver_at, updated_at);")
+		tx.Exec("CREATE INDEX idx_messages on messages (tenant_id, queue_id, deliver_at, delivered_at, tries, max_tries);")
 		tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,message_id);")
 
 		tx.Commit()
@@ -111,7 +129,7 @@ func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 	return rc
 }
 
-func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string) error {
+func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string, visibilityTimeout int) error {
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
@@ -119,7 +137,12 @@ func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string) error {
 
 	qId := q.snow.Generate()
 
-	_, err := q.DB.Exec("INSERT INTO queues (id,tenant_id,name) VALUES (?,?,?)", qId.Int64(), tenantId, strings.ToLower(queue))
+	// id name , tenant_id , rate_limit , paused , max_retries , backoff , visibility )")
+	_, err := q.DB.Exec(
+		"INSERT INTO queues (id,tenant_id,name,rate_limit,paused,max_retries,backoff,visibility_timeout) VALUES (?,?,?,?,?,?,?,?)",
+		qId.Int64(), tenantId, strings.ToLower(queue),
+		0, 0, 0, 30, visibilityTimeout,
+	)
 
 	return err
 }
@@ -184,30 +207,46 @@ func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
 	return rc, nil
 }
 
-func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
+func (q *SQLiteQueue) getQueue(tenantId int64, queue string) (*Queue, error) {
+	rc := &Queue{}
 
-	row := q.DB.QueryRow(
+	row := q.DB.QueryRowx(
 		"select id from queues where name = ? and tenant_id = ?",
-		strings.TrimSpace(strings.ToLower(queue)), tenantId)
+		strings.TrimSpace(strings.ToLower(queue)), tenantId,
+	)
 
-	var queueId int64
-
-	err := row.Scan(&queueId)
-	if err != nil {
-		return 0, err
+	if row.Err() != nil {
+		return nil, row.Err()
 	}
 
-	return queueId, nil
+	err := row.StructScan(rc)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("Queue does not exist")
+		} else {
+			return nil, err
+		}
+	}
+
+	return rc, nil
+	// var queueId int64
+
+	// err := row.Scan(&queueId)
+	// if err != nil {
+	// 	return 0, err
+	// }
+
+	// return queueId, nil
 }
 
-func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error) {
+func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, kv map[string]string, delay int) (int64, error) {
 	// TODO: make some params configurable or a property of the queue
-	requeueIn := 30
+	// requeueIn := 30
 
 	messageSnow := q.snow.Generate()
 	messageId := messageSnow.Int64()
 
-	queueId, err := q.queueId(tenantId, queue)
+	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return 0, err
 	}
@@ -225,15 +264,30 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 	defer tx.Rollback()
 
 	_, err = tx.Exec(
-		"INSERT INTO messages (id ,queue_id , deliver_at , status , tenant_id ,updated_at,message, requeue_in) VALUES (?,?,?,?,?,?,?,?)",
-		messageId, queueId, deliverAt, models.MessageStatusQueued, tenantId, now, message, requeueIn)
+		`
+		INSERT INTO messages 
+		(
+			id,
+			tenant_id,
+			queue_id,
+			deliver_at, 
+			delivered_at,
+			tries,
+			max_tries,
+			requeue_in,
+			message 
+		)
+		VALUES 
+		(?,?,?,?,?,?,?,?,?)
+		`,
+		messageId, tenantId, queue.ID, deliverAt, 0, 0, queue.MaxRetries+3, queue.Backoff+5, message)
 	if err != nil {
 		return 0, err
 	}
 
 	for k, v := range kv {
 		_, err = tx.Exec("INSERT INTO kv (tenant_id, queue_id,k, v,message_id) VALUES (?,?,?,?,?)",
-			tenantId, queueId, k, v, messageId,
+			tenantId, queue.ID, k, v, messageId,
 		)
 		if err != nil {
 			return 0, err
@@ -250,10 +304,14 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queue string, message string, kv m
 	return messageId, nil
 }
 
-func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, requeueIn int) ([]*models.Message, error) {
-	queueId, err := q.queueId(tenantId, queue)
+func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int, requeueIn int) ([]*models.Message, error) {
+	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return nil, err
+	}
+
+	if queue.Paused {
+		return nil, nil
 	}
 
 	now := time.Now().UTC().Unix()
@@ -264,11 +322,9 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, re
 	query := `
 	SELECT * FROM messages
 	WHERE (
-		(
-			(status = ? AND deliver_at <= ?)
-			OR
-			(status = ? AND deliver_at <= ? AND (updated_at + requeue_in) <= ?)
-		)
+		deliver_at <= ?
+		AND delivered_at <= ?
+		AND tries < max_tries
 		AND tenant_id = ?
 		AND queue_id = ?
 	)
@@ -280,9 +336,8 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, re
 	err = q.DB.Select(
 		&rc,
 		query,
-		models.MessageStatusQueued, now,
-		models.MessageStatusDequeued, now, now,
-		tenantId, queueId,
+		now, now,
+		tenantId, queue.ID,
 		numToDequeue,
 	)
 	if err != nil {
@@ -301,12 +356,11 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, re
 	}
 
 	query = `
-	UPDATE messages
-	SET status = ?, updated_at = ?, requeue_in = ?
+	UPDATE messages SET
+	tries = tries + 1, delivered_at = ?, deliver_at = (? + requeue_in)
 	WHERE tenant_id = ? AND queue_id = ? AND id IN (?)
 	`
-
-	query, args, err := sqlx.In(query, models.MessageStatusDequeued, now, requeueIn, tenantId, queueId, messageIDs)
+	query, args, err := sqlx.In(query, now, now, tenantId, queue.ID, messageIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -327,11 +381,11 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, re
 	}
 
 	if rowsAffected != int64(len(messageIDs)) {
-		log.Error().Int64("tenant_id", tenantId).Str("queue", queue).Int64("rowsAffected", rowsAffected).Ints64("message_ids", messageIDs).Msg("Dequeued unexpected number of messages")
+		log.Error().Int64("tenant_id", tenantId).Str("queue", queueName).Int64("rowsAffected", rowsAffected).Ints64("message_ids", messageIDs).Msg("Dequeued unexpected number of messages")
 		return nil, nil
 	}
 
-	query, args, err = sqlx.In("SELECT message_id,k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id IN (?)", tenantId, queueId, messageIDs)
+	query, args, err = sqlx.In("SELECT message_id,k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id IN (?)", tenantId, queue.ID, messageIDs)
 	if err == nil {
 		kvRows, err := q.DB.Queryx(query, args...)
 		if err == nil {
@@ -355,24 +409,24 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queue string, numToDequeue int, re
 	return rc, nil
 }
 
-func (q *SQLiteQueue) Peek(tenantId int64, queue string, messageId int64) *models.Message {
-	queueId, err := q.queueId(tenantId, queue)
+func (q *SQLiteQueue) Peek(tenantId int64, queueName string, messageId int64) *models.Message {
+	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return nil
 	}
 
 	rc := &models.Message{}
 
-	err = q.DB.Get(rc, "SELECT * FROM messages WHERE tenant_id=? AND queue_id=? AND id=?", tenantId, queueId, messageId)
+	err = q.DB.Get(rc, "SELECT * FROM messages WHERE tenant_id=? AND queue_id=? AND id=?", tenantId, queue.ID, messageId)
 	if err != nil {
 		log.Error().Err(err).Interface("message", rc).Msg("Unable to peek")
 	}
 
 	rc.KeyValues = make(map[string]string)
 
-	rows, err := q.DB.Queryx("SELECT k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id=?", tenantId, queueId, messageId)
+	rows, err := q.DB.Queryx("SELECT k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id=?", tenantId, queue.ID, messageId)
 	if err != nil {
-		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queue).Int64("message_id", messageId).Msg("Unable to get k/v")
+		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queueName).Int64("message_id", messageId).Msg("Unable to get k/v")
 	} else {
 		for rows.Next() {
 			var k, v string
@@ -384,8 +438,8 @@ func (q *SQLiteQueue) Peek(tenantId int64, queue string, messageId int64) *model
 	return rc
 }
 
-func (q *SQLiteQueue) Stats(tenantId int64, queue string) models.QueueStats {
-	queueId, err := q.queueId(tenantId, queue)
+func (q *SQLiteQueue) Stats(tenantId int64, queueName string) models.QueueStats {
+	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return models.QueueStats{}
 	}
@@ -399,7 +453,7 @@ func (q *SQLiteQueue) Stats(tenantId int64, queue string) models.QueueStats {
 		count(*) FROM messages WHERE queue_id=? AND tenant_id=? GROUP BY s
 	`,
 		time.Now().UTC().Unix(),
-		queueId, tenantId,
+		queue.ID, tenantId,
 	)
 	if err != nil {
 		return models.QueueStats{}
@@ -424,17 +478,17 @@ func (q *SQLiteQueue) Stats(tenantId int64, queue string) models.QueueStats {
 	return stats
 }
 
-func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models.FilterCriteria) []int64 {
+func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria models.FilterCriteria) []int64 {
 	var rc []int64
 
-	queueId, err := q.queueId(tenantId, queue)
+	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return nil
 	}
 
 	args := make([]any, 0)
 	args = append(args, tenantId)
-	args = append(args, queueId)
+	args = append(args, queue.ID)
 
 	sql := "SELECT id FROM messages WHERE tenant_id=? AND queue_id=? "
 
@@ -461,7 +515,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 	}
 
 	for k, v := range filterCriteria.KV {
-		args = append(args, k, v, tenantId, queueId)
+		args = append(args, k, v, tenantId, queue.ID)
 	}
 
 	args = append(args, len(filterCriteria.KV))
@@ -473,8 +527,8 @@ func (q *SQLiteQueue) Filter(tenantId int64, queue string, filterCriteria models
 	return rc
 }
 
-func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) error {
-	queueId, err := q.queueId(tenantId, queue)
+func (q *SQLiteQueue) Delete(tenantId int64, queueName string, messageId int64) error {
+	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return err
 	}
@@ -494,7 +548,7 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	result, err := tx.Exec(
 		query,
 		tenantId,
-		queueId,
+		queue.ID,
 		messageId,
 	)
 	if err != nil {
@@ -507,7 +561,7 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	}
 
 	if rowsAffected != 1 {
-		log.Error().Int64("tenant_id", tenantId).Str("queue", queue).Int64("rowsAffected", rowsAffected).Int64("message_id", messageId).Msg("Deleted unexpected number of messages")
+		log.Error().Int64("tenant_id", tenantId).Str("queue", queueName).Int64("rowsAffected", rowsAffected).Int64("message_id", messageId).Msg("Deleted unexpected number of messages")
 		return nil
 	}
 
@@ -518,11 +572,11 @@ func (q *SQLiteQueue) Delete(tenantId int64, queue string, messageId int64) erro
 	_, err = tx.Exec(
 		query,
 		tenantId,
-		queueId,
+		queue.ID,
 		messageId,
 	)
 	if err != nil {
-		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queue).Int64("message_id", messageId).Msg("Unable to delete message")
+		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queueName).Int64("message_id", messageId).Msg("Unable to delete message")
 		// return err
 	}
 

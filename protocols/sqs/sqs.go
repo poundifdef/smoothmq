@@ -56,7 +56,7 @@ var requestLatency = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "sqs_request_latency",
 		Help:    "Latency of SQS requests",
-		Buckets: prometheus.ExponentialBucketsRange(0.05, 1, 10),
+		Buckets: prometheus.ExponentialBucketsRange(0.05, 1, 5),
 	},
 	[]string{"tenant_id", "aws_method"},
 )
@@ -250,7 +250,7 @@ func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
 		return err
 	}
 
-	err = s.queue.CreateQueue(tenantId, req.QueueName)
+	err = s.queue.CreateQueue(tenantId, req.QueueName, 30)
 	if err != nil {
 		return err
 	}

@@ -128,7 +128,7 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 		}
 
 	} else {
-		messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(2000))
+		messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(5))
 		input := &sqs.SendMessageInput{
 			QueueUrl:     aws.String(queueUrl),
 			MessageBody:  aws.String(messageBody),
@@ -167,17 +167,17 @@ func receiveMessage(client *sqs.Client, queueUrl string, goroutineID int) int {
 		log.Error().Err(err).Send()
 	}
 
-	for _, msg := range msgs.Messages {
-		log.Trace().Interface("message", msg).Msg("Received message")
-		delInput := &sqs.DeleteMessageInput{
-			QueueUrl:      aws.String(queueUrl),
-			ReceiptHandle: msg.ReceiptHandle,
-		}
-		_, delerr := client.DeleteMessage(context.TODO(), delInput)
-		if delerr != nil {
-			log.Printf("Failed to delete message from goroutine %d, request %d: %v", goroutineID, msg.ReceiptHandle, delerr)
-		}
-	}
+	// for _, msg := range msgs.Messages {
+	// 	log.Trace().Interface("message", msg).Msg("Received message")
+	// 	delInput := &sqs.DeleteMessageInput{
+	// 		QueueUrl:      aws.String(queueUrl),
+	// 		ReceiptHandle: msg.ReceiptHandle,
+	// 	}
+	// 	_, delerr := client.DeleteMessage(context.TODO(), delInput)
+	// 	if delerr != nil {
+	// 		log.Printf("Failed to delete message from goroutine %d, request %d: %v", goroutineID, msg.ReceiptHandle, delerr)
+	// 	}
+	// }
 
 	// time.Sleep(1 * time.Second)
 	return len(msgs.Messages)
