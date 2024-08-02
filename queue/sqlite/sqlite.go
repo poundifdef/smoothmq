@@ -19,11 +19,15 @@ import (
 
 	"github.com/bwmarrin/snowflake"
 	_ "github.com/mattn/go-sqlite3"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type SQLiteQueue struct {
 	Filename string
 	DB       *sqlx.DB
+	DBG      *gorm.DB
 	Mu       *sync.Mutex
 	snow     *snowflake.Node
 	ticker   *time.Ticker
@@ -37,14 +41,14 @@ var queueDiskSize = promauto.NewGauge(
 )
 
 type Queue struct {
-	ID                int64 `db:"id"`
-	TenantID          int64 `db:"tenant_id"`
-	Name              int64 `db:"name"`
-	RateLimit         int64 `db:"rate_limit"`
-	Paused            bool  `db:"paused"`
-	MaxRetries        int64 `db:"max_retries"`
-	Backoff           int64 `db:"backoff"`
-	VisibilityTimeout int64 `db:"visibility_timeout"`
+	ID         int64  `gorm:"primaryKey;autoIncrement:false"`
+	TenantID   int64  `gorm:"not null;index:idx_queue_name,priority:1,unique"`
+	Name       string `gorm:"not null;index:idx_queue_name,priority:2"`
+	RateLimit  int64  `gorm:"not null"`
+	Paused     bool   `gorm:"not null"`
+	MaxRetries int64  `gorm:"not null"`
+	// Backoff           int64  `gorm:"backoff"`
+	VisibilityTimeout int `gorm:"not null"`
 }
 
 // var queueMessageCount = promauto.NewGaugeVec(
@@ -61,54 +65,59 @@ func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 		log.Fatal().Err(err).Send()
 	}
 
-	newDb := false
-	if _, err := os.Stat(cfg.Path); errors.Is(err, os.ErrNotExist) {
-		newDb = true
-	}
+	// newDb := false
+	// if _, err := os.Stat(cfg.Path); errors.Is(err, os.ErrNotExist) {
+	// newDb = true
+	// }
 
-	db, err := sqlx.Open("sqlite3", cfg.Path+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full")
+	olddb, err := sqlx.Open("sqlite3", cfg.Path+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full")
+
+	db, err := gorm.Open(sqlite.Open(cfg.Path+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full"), &gorm.Config{})
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
 
-	if newDb {
-		tx, err := db.Begin()
-		if err != nil {
-			log.Fatal().Err(err).Send()
-		}
+	db.AutoMigrate(&Queue{})
 
-		// TODO: check for errors
-		tx.Exec("CREATE TABLE queues (id integer primary key, name string, tenant_id integer, rate_limit integer, paused integer, max_retries integer, backoff integer, visibility_timeout integer)")
-		_, err = tx.Exec(`
-		CREATE TABLE messages 
-		(
-			id integer primary key not null,
-			tenant_id integer not null,
-			queue_id integer not null,
-			
-			deliver_at integer not null, 
-			delivered_at integer not null,
-			tries integer not null default 0,
-			max_tries integer not null default 1,
-			requeue_in integer not null,
+	// if newDb {
+	// 	tx, err := db.Begin()
+	// 	if err != nil {
+	// 		log.Fatal().Err(err).Send()
+	// 	}
 
-			message string
-		)
-		`)
-		tx.Exec(`
-		CREATE TABLE kv 
-		(tenant_id integer, queue_id integer, message_id integer ,k string, v string)
-		`)
-		tx.Exec("CREATE UNIQUE INDEX idx_queues on queues (tenant_id,name);")
-		tx.Exec("CREATE INDEX idx_messages on messages (tenant_id, queue_id, deliver_at, delivered_at, tries, max_tries);")
-		tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,message_id);")
+	// 	// TODO: check for errors
+	// 	tx.Exec("CREATE TABLE queues (id integer primary key, name string, tenant_id integer, rate_limit integer, paused integer, max_retries integer, backoff integer, visibility_timeout integer)")
+	// 	_, err = tx.Exec(`
+	// 	CREATE TABLE messages
+	// 	(
+	// 		id integer primary key not null,
+	// 		tenant_id integer not null,
+	// 		queue_id integer not null,
 
-		tx.Commit()
-	}
+	// 		deliver_at integer not null,
+	// 		delivered_at integer not null,
+	// 		tries integer not null default 0,
+	// 		max_tries integer not null default 1,
+	// 		requeue_in integer not null,
+
+	// 		message string
+	// 	)
+	// 	`)
+	// 	tx.Exec(`
+	// 	CREATE TABLE kv
+	// 	(tenant_id integer, queue_id integer, message_id integer ,k string, v string)
+	// 	`)
+	// 	tx.Exec("CREATE UNIQUE INDEX idx_queues on queues (tenant_id,name);")
+	// 	tx.Exec("CREATE INDEX idx_messages on messages (tenant_id, queue_id, deliver_at, delivered_at, tries, max_tries);")
+	// 	tx.Exec("CREATE INDEX idx_kv on kv (tenant_id, queue_id,message_id);")
+
+	// 	tx.Commit()
+	// }
 
 	rc := &SQLiteQueue{
 		Filename: cfg.Path,
-		DB:       db,
+		DB:       olddb,
+		DBG:      db,
 		Mu:       &sync.Mutex{},
 		snow:     snow,
 		ticker:   time.NewTicker(1 * time.Second),
@@ -137,14 +146,17 @@ func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string, visibilityTimeou
 
 	qId := q.snow.Generate()
 
-	// id name , tenant_id , rate_limit , paused , max_retries , backoff , visibility )")
-	_, err := q.DB.Exec(
-		"INSERT INTO queues (id,tenant_id,name,rate_limit,paused,max_retries,backoff,visibility_timeout) VALUES (?,?,?,?,?,?,?,?)",
-		qId.Int64(), tenantId, strings.ToLower(queue),
-		0, 0, 0, 30, visibilityTimeout,
-	)
+	res := q.DBG.Create(&Queue{
+		ID:                qId.Int64(),
+		TenantID:          tenantId,
+		Name:              strings.ToLower(queue),
+		RateLimit:         0,
+		Paused:            false,
+		MaxRetries:        -1,
+		VisibilityTimeout: visibilityTimeout,
+	})
 
-	return err
+	return res.Error
 }
 
 func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
@@ -186,22 +198,15 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 }
 
 func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
-	rows, err := q.DB.Query("SELECT name FROM queues WHERE tenant_id=?", tenantId)
-	if err != nil {
-		log.Error().Err(err).Int64("tenant_id", tenantId).Msg("Unable to list queues")
-		return nil, err
+	var queues []Queue
+	res := q.DBG.Where("tenant_id = ?", tenantId).Select("name").Find(&queues)
+	if res.Error != nil {
+		return nil, res.Error
 	}
 
-	rc := make([]string, 0)
-	var name string
-
-	defer rows.Close()
-	for rows.Next() {
-		err = rows.Scan(&name)
-		if err != nil {
-			return nil, err
-		}
-		rc = append(rc, name)
+	rc := make([]string, len(queues))
+	for i, queue := range queues {
+		rc[i] = queue.Name
 	}
 
 	return rc, nil
@@ -211,7 +216,7 @@ func (q *SQLiteQueue) getQueue(tenantId int64, queue string) (*Queue, error) {
 	rc := &Queue{}
 
 	row := q.DB.QueryRowx(
-		"select id from queues where name = ? and tenant_id = ?",
+		"select * from queues where name = ? and tenant_id = ?",
 		strings.TrimSpace(strings.ToLower(queue)), tenantId,
 	)
 
@@ -229,20 +234,9 @@ func (q *SQLiteQueue) getQueue(tenantId int64, queue string) (*Queue, error) {
 	}
 
 	return rc, nil
-	// var queueId int64
-
-	// err := row.Scan(&queueId)
-	// if err != nil {
-	// 	return 0, err
-	// }
-
-	// return queueId, nil
 }
 
 func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, kv map[string]string, delay int) (int64, error) {
-	// TODO: make some params configurable or a property of the queue
-	// requeueIn := 30
-
 	messageSnow := q.snow.Generate()
 	messageId := messageSnow.Int64()
 
@@ -263,6 +257,7 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 
 	defer tx.Rollback()
 
+	// TODO: visibility timeout
 	_, err = tx.Exec(
 		`
 		INSERT INTO messages 
@@ -280,7 +275,7 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 		VALUES 
 		(?,?,?,?,?,?,?,?,?)
 		`,
-		messageId, tenantId, queue.ID, deliverAt, 0, 0, queue.MaxRetries+3, queue.Backoff+5, message)
+		messageId, tenantId, queue.ID, deliverAt, 0, 0, queue.MaxRetries, queue.VisibilityTimeout, message)
 	if err != nil {
 		return 0, err
 	}
@@ -324,7 +319,7 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 	WHERE (
 		deliver_at <= ?
 		AND delivered_at <= ?
-		AND tries < max_tries
+		AND (tries < max_tries OR max_tries = -1)
 		AND tenant_id = ?
 		AND queue_id = ?
 	)
@@ -590,5 +585,10 @@ func (q *SQLiteQueue) Delete(tenantId int64, queueName string, messageId int64) 
 }
 
 func (q *SQLiteQueue) Shutdown() error {
-	return q.DB.Close()
+	db, err := q.DBG.DB()
+	if err != nil {
+		return err
+	}
+
+	return db.Close()
 }
