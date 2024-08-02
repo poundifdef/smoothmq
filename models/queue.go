@@ -23,7 +23,7 @@ type FilterCriteria struct {
 type Queue interface {
 	CreateQueue(tenantId int64, queue string) error
 	DeleteQueue(tenantId int64, queue string) error
-	ListQueues(tenantId int64) ([]string, error)
+	ListQueues(tenantId int64, prefix string) ([]string, error)
 
 	Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error)
 	Dequeue(tenantId int64, queue string, numToDequeue int, requeueIn int) ([]*Message, error)

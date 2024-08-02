@@ -267,7 +267,13 @@ func (s *SQS) queueURL(tenantId int64, queue string) string {
 
 }
 func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
-	queues, err := s.queue.ListQueues(tenantId)
+	req := &ListQueuesRequest{}
+
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return err
+	}
+	queues, err := s.queue.ListQueues(tenantId, req.QueueNamePrefix)
 	if err != nil {
 		return err
 	}
@@ -293,7 +299,7 @@ func (s *SQS) GetQueueURL(c *fiber.Ctx, tenantId int64) error {
 		return ErrValidationError
 	}
 
-	queues, err := s.queue.ListQueues(tenantId)
+	queues, err := s.queue.ListQueues(tenantId, req.QueueName)
 	if err != nil {
 		return err
 	}

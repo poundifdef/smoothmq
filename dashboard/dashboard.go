@@ -125,7 +125,7 @@ func (d *Dashboard) Queues(c *fiber.Ctx) error {
 		Count int
 	}
 
-	queues, err := d.queue.ListQueues(tenantId)
+	queues, err := d.queue.ListQueues(tenantId, "")
 
 	queueDetails := make([]QueueDetails, len(queues))
 	for i, queue := range queues {

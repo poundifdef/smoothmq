@@ -1,7 +1,9 @@
 package sqlite
 
 import (
+	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -162,8 +164,15 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 	return tx.Commit()
 }
 
-func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
-	rows, err := q.DB.Query("SELECT name FROM queues WHERE tenant_id=?", tenantId)
+func (q *SQLiteQueue) ListQueues(tenantId int64, prefix string) ([]string, error) {
+	var rows *sql.Rows
+	var err error
+	if prefix == "" {
+		rows, err = q.DB.Query("SELECT name FROM queues WHERE tenant_id = ?", tenantId)
+	} else {
+		prefixSearch := fmt.Sprintf("%s%%", prefix)
+		rows, err = q.DB.Query("SELECT name FROM queues WHERE tenant_id = ? AND name LIKE ?", tenantId, prefixSearch)
+	}
 	if err != nil {
 		log.Error().Err(err).Int64("tenant_id", tenantId).Msg("Unable to list queues")
 		return nil, err
