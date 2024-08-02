@@ -117,11 +117,11 @@ func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string) error {
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
-	// TODO: validate, lowercase, trim queue names. ensure length and valid characters.
+	// TODO: validate, trim queue names. ensure length and valid characters.
 
 	qId := q.snow.Generate()
 
-	_, err := q.DB.Exec("INSERT INTO queues (id,tenant_id,name) VALUES (?,?,?)", qId.Int64(), tenantId, strings.ToLower(queue))
+	_, err := q.DB.Exec("INSERT INTO queues (id,tenant_id,name) VALUES (?,?,?)", qId.Int64(), tenantId, queue)
 
 	return err
 }
@@ -140,7 +140,7 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queue string) error {
 	defer tx.Rollback()
 
 	var queueId int64
-	row := tx.QueryRow("select id from queues where name = ? and tenant_id = ?", strings.ToLower(queue), tenantId)
+	row := tx.QueryRow("select id from queues where name = ? and tenant_id = ?", queue, tenantId)
 	err = row.Scan(&queueId)
 	if err != nil {
 		return err
@@ -170,8 +170,8 @@ func (q *SQLiteQueue) ListQueues(tenantId int64, prefix string) ([]string, error
 	if prefix == "" {
 		rows, err = q.DB.Query("SELECT name FROM queues WHERE tenant_id = ?", tenantId)
 	} else {
-		prefixSearch := fmt.Sprintf("%s%%", prefix)
-		rows, err = q.DB.Query("SELECT name FROM queues WHERE tenant_id = ? AND name LIKE ?", tenantId, prefixSearch)
+		prefixSearch := fmt.Sprintf("%s*", prefix)
+		rows, err = q.DB.Query("SELECT name FROM queues WHERE tenant_id = ? AND name GLOB ?", tenantId, prefixSearch)
 	}
 	if err != nil {
 		log.Error().Err(err).Int64("tenant_id", tenantId).Msg("Unable to list queues")
@@ -197,7 +197,7 @@ func (q *SQLiteQueue) queueId(tenantId int64, queue string) (int64, error) {
 
 	row := q.DB.QueryRow(
 		"select id from queues where name = ? and tenant_id = ?",
-		strings.TrimSpace(strings.ToLower(queue)), tenantId)
+		strings.TrimSpace(queue), tenantId)
 
 	var queueId int64
 
