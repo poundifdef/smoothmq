@@ -255,16 +255,15 @@ func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
 		return err
 	}
 
-	queueUrl := fmt.Sprintf("https://sqs.us-east-1.amazonaws.com/%d/%s", tenantId, req.QueueName)
 	rc := CreateQueueResponse{
-		QueueUrl: queueUrl,
+		QueueUrl: s.queueURL(tenantId, req.QueueName),
 	}
 
 	return c.JSON(rc)
 }
 
 func (s *SQS) queueURL(tenantId int64, queue string) string {
-	return fmt.Sprintf("https://sqs.us-east-1.amazonaws.com/%d/%s", tenantId, queue)
+	return fmt.Sprintf("%s/%d/%s", s.cfg.Endpoint, tenantId, queue)
 
 }
 func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
