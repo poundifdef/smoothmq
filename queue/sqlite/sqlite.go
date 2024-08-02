@@ -11,7 +11,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -46,6 +45,8 @@ type Queue struct {
 	Paused            bool   `gorm:"not null"`
 	MaxRetries        int    `gorm:"not null"`
 	VisibilityTimeout int    `gorm:"not null"`
+
+	Messages []Message `gorm:"foreignKey:QueueID;references:ID"`
 }
 
 type Message struct {
@@ -61,6 +62,31 @@ type Message struct {
 	RequeueIn   int   `gorm:"not null"`
 
 	Message string `gorm:"not null"`
+
+	KV []KV `gorm:"foreignKey:TenantID,QueueID,MessageID;references:TenantID,QueueID,ID"`
+}
+
+func (message *Message) ToModel() *models.Message {
+	rc := &models.Message{
+		ID:       message.ID,
+		TenantID: message.TenantID,
+		QueueID:  message.QueueID,
+
+		DeliverAt:   int(message.DeliverAt),
+		DeliveredAt: int(message.DeliveredAt),
+		Tries:       message.Tries,
+		MaxTries:    message.MaxTries,
+		RequeueIn:   message.RequeueIn,
+
+		Message:   []byte(message.Message),
+		KeyValues: make(map[string]string),
+	}
+
+	for _, kv := range message.KV {
+		rc.KeyValues[kv.K] = kv.V
+	}
+
+	return rc
 }
 
 type KV struct {
@@ -288,43 +314,51 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 
 	// 	messageId, tenantId, queue.ID, deliverAt, 0, 0, queue.MaxRetries, queue.VisibilityTimeout, message)
 
+	// rc := q.DBG.Transaction(func(tx *gorm.DB) error {
+	newMessage := &Message{
+		ID:          messageId,
+		TenantID:    tenantId,
+		QueueID:     queue.ID,
+		DeliverAt:   deliverAt,
+		DeliveredAt: 0,
+		MaxTries:    queue.MaxRetries,
+		RequeueIn:   queue.VisibilityTimeout,
+		Message:     message,
+
+		KV: make([]KV, 0),
+	}
+
+	// if err := tx.Create(newMessage).Error; err != nil {
+	// return err
+	// }
+
+	for k, v := range kv {
+		newKv := KV{
+			TenantID:  tenantId,
+			MessageID: messageId,
+			QueueID:   queue.ID,
+			K:         k,
+			V:         v,
+		}
+		newMessage.KV = append(newMessage.KV, newKv)
+		// if err := tx.Create(newKv).Error; err != nil {
+		// return err
+		// }
+	}
+
+	// return nil
+	// })
+
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
-	rc := q.DBG.Transaction(func(tx *gorm.DB) error {
-		newMessage := &Message{
-			ID:          messageId,
-			TenantID:    tenantId,
-			QueueID:     queue.ID,
-			DeliverAt:   deliverAt,
-			DeliveredAt: 0,
-			MaxTries:    queue.MaxRetries,
-			RequeueIn:   queue.VisibilityTimeout,
-			Message:     message,
-		}
-		if err := tx.Create(newMessage).Error; err != nil {
-			return err
-		}
-
-		for k, v := range kv {
-			newKv := &KV{
-				TenantID:  tenantId,
-				MessageID: messageId,
-				QueueID:   queue.ID,
-				K:         k,
-				V:         v,
-			}
-			if err := tx.Create(newKv).Error; err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
-
-	if rc != nil {
-		return 0, rc
+	if err := q.DBG.Create(newMessage).Error; err != nil {
+		return 0, err
 	}
+
+	// if rc != nil {
+	// 	return 0, rc
+	// }
 
 	// tx, err := q.DB.Beginx()
 	// if err != nil {
@@ -390,92 +424,118 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
-	query := `
-	SELECT * FROM messages
-	WHERE (
-		deliver_at <= ?
-		AND delivered_at <= ?
-		AND (tries < max_tries OR max_tries = -1)
-		AND tenant_id = ?
-		AND queue_id = ?
-	)
-	LIMIT ?
-	`
+	var messages []Message
 
-	var rc []*models.Message
+	res := q.DBG.Preload("KV").Where(
+		"deliver_at <= ? AND delivered_at <= ? AND (tries < max_tries OR max_tries = -1) AND tenant_id = ? AND queue_id = ?",
+		now, now, tenantId, queue.ID).
+		Limit(numToDequeue).
+		Find(&messages)
 
-	err = q.DB.Select(
-		&rc,
-		query,
-		now, now,
-		tenantId, queue.ID,
-		numToDequeue,
-	)
-	if err != nil {
+	if res.Error != nil {
 		return nil, err
 	}
 
-	if len(rc) == 0 {
+	if len(messages) == 0 {
 		return nil, nil
 	}
+	// query := `
+	// SELECT * FROM messages
+	// WHERE (
+	// 	deliver_at <= ?
+	// 	AND delivered_at <= ?
+	// 	AND (tries < max_tries OR max_tries = -1)
+	// 	AND tenant_id = ?
+	// 	AND queue_id = ?
+	// )
+	// LIMIT ?
+	// `
+
+	rc := make([]*models.Message, len(messages))
+
+	for i, message := range messages {
+		rc[i] = message.ToModel()
+	}
+
+	// err = q.DB.Select(
+	// 	&rc,
+	// 	query,
+	// 	now, now,
+	// 	tenantId, queue.ID,
+	// 	numToDequeue,
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	messageIDs := make([]int64, len(rc))
-	msgIndex := make(map[int64]int)
+	// msgIndex := make(map[int64]int)
 	for i, message := range rc {
 		messageIDs[i] = message.ID
-		msgIndex[message.ID] = i
+		// msgIndex[message.ID] = i
 	}
 
-	query = `
-	UPDATE messages SET
-	tries = tries + 1, delivered_at = ?, deliver_at = (? + requeue_in)
-	WHERE tenant_id = ? AND queue_id = ? AND id IN (?)
-	`
-	query, args, err := sqlx.In(query, now, now, tenantId, queue.ID, messageIDs)
-	if err != nil {
-		return nil, err
+	res = q.DBG.Model(&Message{}).Where("tenant_id = ? AND queue_id = ? AND id in ?", tenantId, queue.ID, messageIDs).
+		UpdateColumns(map[string]any{
+			"tries":        gorm.Expr("tries+1"),
+			"delivered_at": now,
+			"deliver_at":   gorm.Expr("? + requeue_in", now),
+		})
+
+	if res.Error != nil {
+		return nil, res.Error
 	}
+
+	// query = `
+	// UPDATE messages SET
+	// tries = tries + 1, delivered_at = ?, deliver_at = (? + requeue_in)
+	// WHERE tenant_id = ? AND queue_id = ? AND id IN (?)
+	// `
+	// query, args, err := sqlx.In(query, now, now, tenantId, queue.ID, messageIDs)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	for _, messageId := range messageIDs {
 		log.Debug().Int64("message_id", messageId).Msg("Dequeued message")
 	}
 
-	query = q.DB.Rebind(query)
-	result, err := q.DB.Exec(query, args...)
-	if err != nil {
-		return nil, err
-	}
+	// query = q.DB.Rebind(query)
+	// result, err := q.DB.Exec(query, args...)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
+	// rowsAffected, err := result.RowsAffected()
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	if rowsAffected != int64(len(messageIDs)) {
-		log.Error().Int64("tenant_id", tenantId).Str("queue", queueName).Int64("rowsAffected", rowsAffected).Ints64("message_ids", messageIDs).Msg("Dequeued unexpected number of messages")
-		return nil, nil
-	}
+	// if rowsAffected != int64(len(messageIDs)) {
+	// 	log.Error().Int64("tenant_id", tenantId).Str("queue", queueName).Int64("rowsAffected", rowsAffected).Ints64("message_ids", messageIDs).Msg("Dequeued unexpected number of messages")
+	// 	return nil, nil
+	// }
 
-	query, args, err = sqlx.In("SELECT message_id,k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id IN (?)", tenantId, queue.ID, messageIDs)
-	if err == nil {
-		kvRows, err := q.DB.Queryx(query, args...)
-		if err == nil {
-			for kvRows.Next() {
-				var k, v string
-				var messageId int64
-				kvRows.Scan(&messageId, &k, &v)
+	// query, args, err = sqlx.In("SELECT message_id,k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id IN (?)", tenantId, queue.ID, messageIDs)
+	// if err == nil {
+	// 	kvRows, err := q.DB.Queryx(query, args...)
+	// 	if err == nil {
+	// 		for kvRows.Next() {
+	// 			var k, v string
+	// 			var messageId int64
+	// 			kvRows.Scan(&messageId, &k, &v)
 
-				msgIdx, ok := msgIndex[messageId]
-				if ok {
-					if rc[msgIdx].KeyValues == nil {
-						rc[msgIdx].KeyValues = make(map[string]string)
-					}
+	// 			msgIdx, ok := msgIndex[messageId]
+	// 			if ok {
+	// 				if rc[msgIdx].KeyValues == nil {
+	// 					rc[msgIdx].KeyValues = make(map[string]string)
+	// 				}
 
-					rc[msgIdx].KeyValues[k] = v
-				}
-			}
-		}
-	}
+	// 				rc[msgIdx].KeyValues[k] = v
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	return rc, nil
 }
@@ -486,67 +546,79 @@ func (q *SQLiteQueue) Peek(tenantId int64, queueName string, messageId int64) *m
 		return nil
 	}
 
-	rc := &models.Message{}
+	message := &Message{}
 
-	err = q.DB.Get(rc, "SELECT * FROM messages WHERE tenant_id=? AND queue_id=? AND id=?", tenantId, queue.ID, messageId)
-	if err != nil {
-		log.Error().Err(err).Interface("message", rc).Msg("Unable to peek")
+	res := q.DBG.Preload("KV").Where(
+		"tenant_id = ? AND queue_id = ? AND id = ?",
+		tenantId, queue.ID, messageId).
+		First(message)
+
+	if res.Error != nil {
+		return nil
 	}
 
-	rc.KeyValues = make(map[string]string)
+	// rc := &models.Message{}
 
-	rows, err := q.DB.Queryx("SELECT k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id=?", tenantId, queue.ID, messageId)
-	if err != nil {
-		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queueName).Int64("message_id", messageId).Msg("Unable to get k/v")
-	} else {
-		for rows.Next() {
-			var k, v string
-			rows.Scan(&k, &v)
-			rc.KeyValues[k] = v
-		}
-	}
+	// err = q.DB.Get(rc, "SELECT * FROM messages WHERE tenant_id=? AND queue_id=? AND id=?", tenantId, queue.ID, messageId)
+	// if err != nil {
+	// 	log.Error().Err(err).Interface("message", rc).Msg("Unable to peek")
+	// }
 
-	return rc
+	// rc.KeyValues = make(map[string]string)
+
+	// rows, err := q.DB.Queryx("SELECT k,v FROM kv WHERE tenant_id=? AND queue_id=? AND message_id=?", tenantId, queue.ID, messageId)
+	// if err != nil {
+	// 	log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queueName).Int64("message_id", messageId).Msg("Unable to get k/v")
+	// } else {
+	// 	for rows.Next() {
+	// 		var k, v string
+	// 		rows.Scan(&k, &v)
+	// 		rc.KeyValues[k] = v
+	// 	}
+	// }
+
+	return message.ToModel()
 }
 
 func (q *SQLiteQueue) Stats(tenantId int64, queueName string) models.QueueStats {
-	queue, err := q.getQueue(tenantId, queueName)
-	if err != nil {
-		return models.QueueStats{}
-	}
+	return models.QueueStats{}
+	// queue, err := q.getQueue(tenantId, queueName)
+	// if err != nil {
+	// return models.QueueStats{}
+	// }
 
-	rows, err := q.DB.Queryx(`
-		SELECT 
-		CASE
-			WHEN status = 2 AND updated_at + requeue_in <= ? THEN 1
-			ELSE status
-		END AS s,
-		count(*) FROM messages WHERE queue_id=? AND tenant_id=? GROUP BY s
-	`,
-		time.Now().UTC().Unix(),
-		queue.ID, tenantId,
-	)
-	if err != nil {
-		return models.QueueStats{}
-	}
+	// rows, err := q.DB.Queryx(`
+	// 	SELECT
+	// 	CASE
+	// 		WHEN status = 2 AND updated_at + requeue_in <= ? THEN 1
+	// 		ELSE status
+	// 	END AS s,
+	// 	count(*) FROM messages WHERE queue_id=? AND tenant_id=? GROUP BY s
+	// `,
+	// 	time.Now().UTC().Unix(),
+	// 	queue.ID, tenantId,
+	// )
+	// if err != nil {
+	// 	return models.QueueStats{}
+	// }
 
-	stats := models.QueueStats{
-		Counts:        make(map[models.MessageStatus]int),
-		TotalMessages: 0,
-	}
-	for rows.Next() {
-		var statusType models.MessageStatus
-		var count int
+	// stats := models.QueueStats{
+	// 	Counts:        make(map[models.MessageStatus]int),
+	// 	TotalMessages: 0,
+	// }
+	// for rows.Next() {
+	// 	var statusType models.MessageStatus
+	// 	var count int
 
-		rows.Scan(&statusType, &count)
+	// 	rows.Scan(&statusType, &count)
 
-		stats.TotalMessages += count
-		stats.Counts[statusType] = count
-	}
+	// 	stats.TotalMessages += count
+	// 	stats.Counts[statusType] = count
+	// }
 
-	rows.Close()
+	// rows.Close()
 
-	return stats
+	// return stats
 }
 
 func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria models.FilterCriteria) []int64 {
@@ -593,7 +665,12 @@ func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria mo
 
 	sql += "LIMIT 10"
 
-	q.DB.Select(&rc, sql, args...)
+	// q.DB.Select(&rc, sql, args...)
+
+	res := q.DBG.Raw(sql, args...).Scan(&rc)
+	if res.Error != nil {
+		log.Error().Err(res.Error).Msg("Unable to filter")
+	}
 
 	return rc
 }
@@ -607,51 +684,63 @@ func (q *SQLiteQueue) Delete(tenantId int64, queueName string, messageId int64) 
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
-	tx, err := q.DB.Begin()
-	if err != nil {
-		return err
-	}
+	err = q.DBG.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("tenant_id = ? AND queue_id = ? AND message_id = ?", tenantId, queue.ID, messageId).Delete(&KV{}).Error; err != nil {
+			return err
+		}
 
-	query := `
-	DELETE FROM messages
-	WHERE tenant_id = ? AND queue_id = ? AND id = ?
-	`
-	result, err := tx.Exec(
-		query,
-		tenantId,
-		queue.ID,
-		messageId,
-	)
-	if err != nil {
-		return err
-	}
+		if err := tx.Where("tenant_id = ? AND queue_id = ? AND id = ?", tenantId, queue.ID, messageId).Delete(&Message{}).Error; err != nil {
+			return err
+		}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected != 1 {
-		log.Error().Int64("tenant_id", tenantId).Str("queue", queueName).Int64("rowsAffected", rowsAffected).Int64("message_id", messageId).Msg("Deleted unexpected number of messages")
 		return nil
-	}
+	})
 
-	query = `
-	DELETE FROM kv
-	WHERE tenant_id = ? AND queue_id = ? AND message_id = ?
-	`
-	_, err = tx.Exec(
-		query,
-		tenantId,
-		queue.ID,
-		messageId,
-	)
-	if err != nil {
-		log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queueName).Int64("message_id", messageId).Msg("Unable to delete message")
-		// return err
-	}
+	// tx, err := q.DB.Begin()
+	// if err != nil {
+	// 	return err
+	// }
 
-	err = tx.Commit()
+	// query := `
+	// DELETE FROM messages
+	// WHERE tenant_id = ? AND queue_id = ? AND id = ?
+	// `
+	// result, err := tx.Exec(
+	// 	query,
+	// 	tenantId,
+	// 	queue.ID,
+	// 	messageId,
+	// )
+	// if err != nil {
+	// 	return err
+	// }
+
+	// rowsAffected, err := result.RowsAffected()
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if rowsAffected != 1 {
+	// 	log.Error().Int64("tenant_id", tenantId).Str("queue", queueName).Int64("rowsAffected", rowsAffected).Int64("message_id", messageId).Msg("Deleted unexpected number of messages")
+	// 	return nil
+	// }
+
+	// query = `
+	// DELETE FROM kv
+	// WHERE tenant_id = ? AND queue_id = ? AND message_id = ?
+	// `
+	// _, err = tx.Exec(
+	// 	query,
+	// 	tenantId,
+	// 	queue.ID,
+	// 	messageId,
+	// )
+	// if err != nil {
+	// 	log.Error().Err(err).Int64("tenant_id", tenantId).Str("queue", queueName).Int64("message_id", messageId).Msg("Unable to delete message")
+	// 	// return err
+	// }
+
+	// err = tx.Commit()
 
 	if err == nil {
 		log.Debug().Int64("message_id", messageId).Msg("Deleted message")
