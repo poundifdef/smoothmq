@@ -24,11 +24,10 @@ import (
 
 type SQLiteQueue struct {
 	Filename string
-	// DB       *sqlx.DB
-	DBG    *gorm.DB
-	Mu     *sync.Mutex
-	snow   *snowflake.Node
-	ticker *time.Ticker
+	DBG      *gorm.DB
+	Mu       *sync.Mutex
+	snow     *snowflake.Node
+	ticker   *time.Ticker
 }
 
 var queueDiskSize = promauto.NewGauge(
@@ -59,7 +58,6 @@ type Message struct {
 	DeliveredAt int64 `gorm:"not null;index:idx_message,priority:4;not null"`
 	Tries       int   `gorm:"not null;index:idx_message,priority:5;not null"`
 	MaxTries    int   `gorm:"not null;index:idx_message,priority:6;not null"`
-	// RequeueIn   int   `gorm:"not null"`
 
 	Message string `gorm:"not null"`
 
@@ -76,7 +74,6 @@ func (message *Message) ToModel() *models.Message {
 		DeliveredAt: int(message.DeliveredAt),
 		Tries:       message.Tries,
 		MaxTries:    message.MaxTries,
-		// RequeueIn:   message.RequeueIn,
 
 		Message:   []byte(message.Message),
 		KeyValues: make(map[string]string),
@@ -95,6 +92,13 @@ type KV struct {
 	MessageID int64  `gorm:"not null;index:idx_kv,priority:3"`
 	K         string `gorm:"not null"`
 	V         string `gorm:"not null"`
+}
+
+type RateLimit struct {
+	TenantID int64 `gorm:"not null;index:idx_ratelimit,priority:1"`
+	QueueID  int64 `gorm:"not null;index:idx_ratelimit,priority:2"`
+	Ts       int64 `gorm:"not null"`
+	N        int   `gorm:"not null"`
 }
 
 func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
