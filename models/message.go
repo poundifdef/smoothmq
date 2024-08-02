@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type MessageStatus uint8
@@ -11,6 +12,7 @@ type MessageStatus uint8
 const (
 	MessageStatusQueued   MessageStatus = 1
 	MessageStatusDequeued MessageStatus = 2
+	MessageStatusFailed   MessageStatus = 3
 	// MessageStatusPaused   MessageStatus = 3
 	// MessageStatusDeleted  MessageStatus = 4
 )
@@ -21,6 +23,8 @@ func (s MessageStatus) String() string {
 		return "Queued"
 	case MessageStatusDequeued:
 		return "Dequeued"
+	case MessageStatusFailed:
+		return "Failed"
 	}
 
 	return fmt.Sprintf("%d", s)
@@ -35,12 +39,26 @@ type Message struct {
 	DeliveredAt int `db:"delivered_at"`
 	Tries       int `db:"tries"`
 	MaxTries    int `db:"max_tries"`
-	RequeueIn   int `db:"requeue_in"`
+	// RequeueIn   int `db:"requeue_in"`
 
-	Status MessageStatus `db:"status"`
+	// Status MessageStatus `db:"status"`
 
 	Message   []byte `db:"message"`
 	KeyValues map[string]string
+}
+
+func (m *Message) Status() MessageStatus {
+	now := time.Now().UTC().Unix()
+
+	if m.Tries == m.MaxTries && now > int64(m.DeliverAt) {
+		return MessageStatusFailed
+	}
+
+	if now >= int64(m.DeliveredAt) && now < int64(m.DeliverAt) {
+		return MessageStatusDequeued
+	}
+
+	return MessageStatusQueued
 }
 
 func (m *Message) IsB64() bool {

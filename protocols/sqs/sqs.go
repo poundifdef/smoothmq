@@ -457,10 +457,9 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 	tokens := strings.Split(req.QueueUrl, "/")
 	queue := tokens[len(tokens)-1]
 
-	// TODO: make this configurable on queue
-	visibilityTimeout := 30
-	if req.VisibilityTimeout > 0 {
-		visibilityTimeout = req.VisibilityTimeout
+	visibilityTimeout := -1
+	if req.VisibilityTimeout != nil {
+		visibilityTimeout = *req.VisibilityTimeout
 	}
 
 	var messages []*models.Message

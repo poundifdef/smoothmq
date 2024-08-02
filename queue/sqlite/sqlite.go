@@ -59,7 +59,7 @@ type Message struct {
 	DeliveredAt int64 `gorm:"not null;index:idx_message,priority:4;not null"`
 	Tries       int   `gorm:"not null;index:idx_message,priority:5;not null"`
 	MaxTries    int   `gorm:"not null;index:idx_message,priority:6;not null"`
-	RequeueIn   int   `gorm:"not null"`
+	// RequeueIn   int   `gorm:"not null"`
 
 	Message string `gorm:"not null"`
 
@@ -76,7 +76,7 @@ func (message *Message) ToModel() *models.Message {
 		DeliveredAt: int(message.DeliveredAt),
 		Tries:       message.Tries,
 		MaxTries:    message.MaxTries,
-		RequeueIn:   message.RequeueIn,
+		// RequeueIn:   message.RequeueIn,
 
 		Message:   []byte(message.Message),
 		KeyValues: make(map[string]string),
@@ -240,8 +240,8 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 		DeliverAt:   deliverAt,
 		DeliveredAt: 0,
 		MaxTries:    queue.MaxRetries,
-		RequeueIn:   queue.VisibilityTimeout,
-		Message:     message,
+		// RequeueIn:   queue.VisibilityTimeout,
+		Message: message,
 
 		KV: make([]KV, 0),
 	}
@@ -277,6 +277,11 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 
 	if queue.Paused {
 		return nil, nil
+	}
+
+	visibilityTimeout := queue.VisibilityTimeout
+	if requeueIn > -1 {
+		visibilityTimeout = requeueIn
 	}
 
 	now := time.Now().UTC().Unix()
@@ -315,7 +320,7 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 		UpdateColumns(map[string]any{
 			"tries":        gorm.Expr("tries+1"),
 			"delivered_at": now,
-			"deliver_at":   gorm.Expr("? + requeue_in", now),
+			"deliver_at":   gorm.Expr("?", now+int64(visibilityTimeout)),
 		})
 
 	if res.Error != nil {
@@ -350,44 +355,52 @@ func (q *SQLiteQueue) Peek(tenantId int64, queueName string, messageId int64) *m
 }
 
 func (q *SQLiteQueue) Stats(tenantId int64, queueName string) models.QueueStats {
-	return models.QueueStats{}
-	// queue, err := q.getQueue(tenantId, queueName)
-	// if err != nil {
-	// return models.QueueStats{}
-	// }
+	queue, err := q.getQueue(tenantId, queueName)
+	if err != nil {
+		return models.QueueStats{}
+	}
 
-	// rows, err := q.DB.Queryx(`
-	// 	SELECT
-	// 	CASE
-	// 		WHEN status = 2 AND updated_at + requeue_in <= ? THEN 1
-	// 		ELSE status
-	// 	END AS s,
-	// 	count(*) FROM messages WHERE queue_id=? AND tenant_id=? GROUP BY s
-	// `,
-	// 	time.Now().UTC().Unix(),
-	// 	queue.ID, tenantId,
-	// )
-	// if err != nil {
-	// 	return models.QueueStats{}
-	// }
+	now := time.Now().UTC().Unix()
 
-	// stats := models.QueueStats{
-	// 	Counts:        make(map[models.MessageStatus]int),
-	// 	TotalMessages: 0,
-	// }
-	// for rows.Next() {
-	// 	var statusType models.MessageStatus
-	// 	var count int
+	res := q.DBG.Raw(`
+		SELECT
+		CASE
+			WHEN tries = max_tries AND deliver_at < ? THEN 3
+			WHEN delivered_at <= ? AND deliver_at > ? THEN 2
+			ELSE 1
+		END AS s,
+		count(*) FROM messages WHERE queue_id=? AND tenant_id=? GROUP BY s
+	`, now, now, now,
+		queue.ID, tenantId,
+	)
 
-	// 	rows.Scan(&statusType, &count)
+	if res.Error != nil {
+		return models.QueueStats{}
+	}
 
-	// 	stats.TotalMessages += count
-	// 	stats.Counts[statusType] = count
-	// }
+	rows, err := res.Rows()
+	if err != nil {
+		return models.QueueStats{}
+	}
 
-	// rows.Close()
+	stats := models.QueueStats{
+		Counts:        make(map[models.MessageStatus]int),
+		TotalMessages: 0,
+	}
 
-	// return stats
+	for rows.Next() {
+		var statusType models.MessageStatus
+		var count int
+
+		rows.Scan(&statusType, &count)
+
+		stats.TotalMessages += count
+		stats.Counts[statusType] = count
+	}
+
+	rows.Close()
+
+	return stats
 }
 
 func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria models.FilterCriteria) []int64 {
