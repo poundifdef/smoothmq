@@ -411,7 +411,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria mo
 
 	if len(filterCriteria.KV) > 0 {
 		sql += " AND "
-		sql += " id IN (SELECT message_id FROM kv WHERE ("
+		sql += " id IN (SELECT message_id FROM kvs WHERE ("
 
 		for i := range len(filterCriteria.KV) {
 			sql += "(k=? AND v=? and tenant_id=? and queue_id=?)"
