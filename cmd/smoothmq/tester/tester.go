@@ -158,7 +158,7 @@ func receiveMessage(client *sqs.Client, queueUrl string, goroutineID int) int {
 	i := &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(queueUrl),
 		MaxNumberOfMessages: 1,
-		VisibilityTimeout:   *aws.Int32(5),
+		// VisibilityTimeout:   *aws.Int32(5),
 		MessageAttributeNames: []string{
 			"All",
 		},
