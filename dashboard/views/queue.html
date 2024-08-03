@@ -12,7 +12,7 @@
     <div class="sixteen wide column">
         <div class="ui pointing secondary menu">
             <a class="item active" href="/queues/{{.Queue}}">Messages</a>
-            <!-- <a class="item" href="/queues/{{.Queue}}/settings">Settings</a> -->
+            <a class="item" href="/queues/{{.Queue}}/settings">Settings</a>
         </div>
     </div>
 
@@ -32,6 +32,14 @@
                 </div>
                 <div class="label">
                     Processing
+                </div>
+            </div>
+            <div class="ui small statistic">
+                <div class="value">
+                    {{index $.Stats.Counts 3}}
+                </div>
+                <div class="label">
+                    Failed
                 </div>
             </div>
         </div>

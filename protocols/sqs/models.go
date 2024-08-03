@@ -29,7 +29,7 @@ type ReceiveMessageRequest struct {
 	AttributeNames          []string `json:"AttributeNames,omitempty"`
 	MessageAttributeNames   []string `json:"MessageAttributeNames,omitempty"`
 	MaxNumberOfMessages     int      `json:"MaxNumberOfMessages,omitempty"`
-	VisibilityTimeout       int      `json:"VisibilityTimeout,omitempty"`
+	VisibilityTimeout       *int     `json:"VisibilityTimeout,omitempty"`
 	WaitTimeSeconds         int      `json:"WaitTimeSeconds,omitempty"`
 	ReceiveRequestAttemptId string   `json:"ReceiveRequestAttemptId,omitempty"`
 }

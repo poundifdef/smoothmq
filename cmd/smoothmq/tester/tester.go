@@ -128,7 +128,7 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 		}
 
 	} else {
-		messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(2000))
+		messageBody := fmt.Sprintf("Message from goroutine %d, request %d %s", goroutineID, requestID, GenerateRandomString(5))
 		input := &sqs.SendMessageInput{
 			QueueUrl:     aws.String(queueUrl),
 			MessageBody:  aws.String(messageBody),
@@ -158,6 +158,7 @@ func receiveMessage(client *sqs.Client, queueUrl string, goroutineID int) int {
 	i := &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(queueUrl),
 		MaxNumberOfMessages: 1,
+		// VisibilityTimeout:   *aws.Int32(5),
 		MessageAttributeNames: []string{
 			"All",
 		},

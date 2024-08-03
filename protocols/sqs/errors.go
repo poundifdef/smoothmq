@@ -24,3 +24,4 @@ var ErrIncompleteSignature = NewSQSError(400, "IncompleteSignature", "The reques
 var ErrInvalidClientTokenId = NewSQSError(403, "InvalidClientTokenId", "The security token included in the request is invalid")
 var ErrQueueDoesNotExist = NewSQSError(400, "QueueDoesNotExist", "Queue does not exist")
 var ErrValidationError = NewSQSError(400, "ValidationError", "Invalid request payload")
+var ErrQueueNameExists = NewSQSError(400, "QueueNameExists", "Queue already exists")

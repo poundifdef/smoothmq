@@ -32,6 +32,14 @@
         <td>{{.Message.DeliverAt}}</td>
     </tr>
     <tr>
+        <td>Last Delivered</td>
+        <td>{{.Message.DeliveredAt}}</td>
+    </tr>
+    <tr>
+        <td>Delivery Attempts</td>
+        <td>{{.Message.Tries}}</td>
+    </tr>
+    <tr>
         <td>Message</td>
         <td style="word-break: break-word;">
             {{printf "%s" .Message.Message}}

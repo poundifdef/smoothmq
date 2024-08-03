@@ -85,6 +85,8 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg co
 	app.Post("/queues", d.NewQueue)
 	app.Get("/queues/:queue", d.Queue)
 	app.Get("/queues/:queue/settings", d.QueueSettings)
+	app.Post("/queues/:queue/settings", d.SaveQueueSettings)
+	app.Get("/queues/:queue/delete", d.DeleteQueueConfirm)
 	app.Post("/queues/:queue/delete", d.DeleteQueue)
 	app.Get("/queues/:queue/messages/:message", d.Message)
 
@@ -193,20 +195,87 @@ func (d *Dashboard) Queue(c *fiber.Ctx) error {
 	return c.Render("queue", fiber.Map{"Queue": queueName, "Stats": queueStats, "Messages": messages, "Filter": filterString}, "layout")
 }
 
+func (d *Dashboard) DeleteQueueConfirm(c *fiber.Ctx) error {
+	queueName := c.Params("queue")
+
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
+
+	_, err = d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
+
+	return c.Render("delete_queue", fiber.Map{"Queue": queueName}, "layout")
+}
+
 func (d *Dashboard) QueueSettings(c *fiber.Ctx) error {
 	queueName := c.Params("queue")
 
-	// r, err := adaptor.ConvertRequest(c, false)
-	// if err != nil {
-	// 	return err
-	// }
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
 
-	// tenantId, err := d.tenantManager.GetTenant(r)
-	// if err != nil {
-	// 	return err
-	// }
+	tenantId, err := d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
 
-	return c.Render("queue_settings", fiber.Map{"Queue": queueName}, "layout")
+	queue, err := d.queue.GetQueue(tenantId, queueName)
+	if err != nil {
+		return err
+	}
+
+	return c.Render("queue_settings", fiber.Map{"Queue": queue}, "layout")
+}
+
+func (d *Dashboard) SaveQueueSettings(c *fiber.Ctx) error {
+	queueName := c.Params("queue")
+
+	r, err := adaptor.ConvertRequest(c, false)
+	if err != nil {
+		return err
+	}
+
+	tenantId, err := d.tenantManager.GetTenant(r)
+	if err != nil {
+		return err
+	}
+
+	queue, err := d.queue.GetQueue(tenantId, queueName)
+	if err != nil {
+		return err
+	}
+
+	rateLimit, err := strconv.ParseFloat(c.FormValue("rate_limit"), 64)
+	if err != nil {
+		return err
+	}
+
+	maxRetries, err := strconv.ParseInt(c.FormValue("max_retries"), 10, 32)
+	if err != nil {
+		return err
+	}
+
+	visibilityTimeout, err := strconv.ParseInt(c.FormValue("visibility_timeout"), 10, 32)
+	if err != nil {
+		return err
+	}
+
+	queue.RateLimit = rateLimit
+	queue.MaxRetries = int(maxRetries)
+	queue.VisibilityTimeout = int(visibilityTimeout)
+
+	err = d.queue.UpdateQueue(tenantId, queueName, queue)
+	if err != nil {
+		return err
+	}
+
+	return c.Redirect("/queues/" + queueName + "/settings")
+	// return c.Render("queue_settings", fiber.Map{"Queue": queue}, "layout")
 }
 
 func (d *Dashboard) Message(c *fiber.Ctx) error {
@@ -249,7 +318,13 @@ func (d *Dashboard) NewQueue(c *fiber.Ctx) error {
 		return err
 	}
 
-	err = d.queue.CreateQueue(tenantId, queueName)
+	properties := models.QueueProperties{
+		Name:              queueName,
+		RateLimit:         -1,
+		MaxRetries:        -1,
+		VisibilityTimeout: 30,
+	}
+	err = d.queue.CreateQueue(tenantId, properties)
 
 	if err != nil {
 		return err

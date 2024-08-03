@@ -56,7 +56,7 @@ var requestLatency = promauto.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "sqs_request_latency",
 		Help:    "Latency of SQS requests",
-		Buckets: prometheus.ExponentialBucketsRange(0.05, 1, 10),
+		Buckets: prometheus.ExponentialBucketsRange(0.05, 1, 5),
 	},
 	[]string{"tenant_id", "aws_method"},
 )
@@ -250,7 +250,18 @@ func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
 		return err
 	}
 
-	err = s.queue.CreateQueue(tenantId, req.QueueName)
+	properties := models.QueueProperties{
+		Name:              req.QueueName,
+		RateLimit:         -1,
+		MaxRetries:        -1,
+		VisibilityTimeout: 30,
+	}
+	err = s.queue.CreateQueue(tenantId, properties)
+
+	if errors.Is(err, models.ErrQueueExists) {
+		return ErrQueueNameExists
+	}
+
 	if err != nil {
 		return err
 	}
@@ -457,10 +468,9 @@ func (s *SQS) ReceiveMessage(c *fiber.Ctx, tenantId int64) error {
 	tokens := strings.Split(req.QueueUrl, "/")
 	queue := tokens[len(tokens)-1]
 
-	// TODO: make this configurable on queue
-	visibilityTimeout := 30
-	if req.VisibilityTimeout > 0 {
-		visibilityTimeout = req.VisibilityTimeout
+	visibilityTimeout := -1
+	if req.VisibilityTimeout != nil {
+		visibilityTimeout = *req.VisibilityTimeout
 	}
 
 	var messages []*models.Message
