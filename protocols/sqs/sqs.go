@@ -281,14 +281,20 @@ func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
 	}
 
 	rc := CreateQueueResponse{
-		QueueUrl: s.queueURL(tenantId, req.QueueName),
+		QueueUrl: s.queueURL(c.Hostname(), tenantId, req.QueueName),
 	}
 
 	return c.JSON(rc)
 }
 
-func (s *SQS) queueURL(tenantId int64, queue string) string {
-	return fmt.Sprintf("%s/%d/%s", s.cfg.Endpoint, tenantId, queue)
+func (s *SQS) queueURL(webHost string, tenantId int64, queue string) string {
+	host := utils.CopyString(webHost)
+
+	if s.cfg.EndpointOverride != "" {
+		host = s.cfg.EndpointOverride
+	}
+
+	return fmt.Sprintf("%s/%d/%s", host, tenantId, queue)
 
 }
 func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
@@ -300,7 +306,7 @@ func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
 	queueUrls := make([]string, len(queues))
 
 	for i, queue := range queues {
-		queueUrls[i] = s.queueURL(tenantId, queue)
+		queueUrls[i] = s.queueURL(c.Hostname(), tenantId, queue)
 	}
 
 	rc := ListQueuesResponse{
@@ -326,7 +332,7 @@ func (s *SQS) GetQueueURL(c *fiber.Ctx, tenantId int64) error {
 	for _, q := range queues {
 		if q == req.QueueName {
 			response := GetQueueURLResponse{
-				QueueURL: s.queueURL(tenantId, q),
+				QueueURL: s.queueURL(c.Hostname(), tenantId, q),
 			}
 			return c.JSON(response)
 		}
