@@ -43,7 +43,6 @@ type Queue struct {
 	TenantID          int64   `gorm:"not null;index:idx_queue_name,priority:1,unique"`
 	Name              string  `gorm:"not null;index:idx_queue_name,priority:2"`
 	RateLimit         float64 `gorm:"not null"`
-	Paused            bool    `gorm:"not null"`
 	MaxRetries        int     `gorm:"not null"`
 	VisibilityTimeout int     `gorm:"not null"`
 
@@ -156,22 +155,21 @@ func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 	return rc
 }
 
-func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string, visibilityTimeout int) error {
+func (q *SQLiteQueue) CreateQueue(tenantId int64, properties models.QueueProperties) error {
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
-	// TODO: validate, lowercase, trim queue names. ensure length and valid characters.
+	// TODO: validate, trim queue names. ensure length and valid characters.
 
 	qId := q.snow.Generate()
 
 	res := q.DBG.Create(&Queue{
 		ID:                qId.Int64(),
 		TenantID:          tenantId,
-		Name:              strings.ToLower(queue),
-		RateLimit:         0,
-		Paused:            false,
-		MaxRetries:        -1,
-		VisibilityTimeout: visibilityTimeout,
+		Name:              properties.Name,
+		RateLimit:         properties.RateLimit,
+		MaxRetries:        properties.MaxRetries,
+		VisibilityTimeout: properties.VisibilityTimeout,
 	})
 
 	if errors.Is(res.Error, gorm.ErrDuplicatedKey) {
@@ -179,6 +177,44 @@ func (q *SQLiteQueue) CreateQueue(tenantId int64, queue string, visibilityTimeou
 	}
 
 	return res.Error
+}
+
+func (q *SQLiteQueue) UpdateQueue(tenantId int64, queueName string, properties models.QueueProperties) error {
+	q.Mu.Lock()
+	defer q.Mu.Unlock()
+
+	// TODO: validate, trim queue names. ensure length and valid characters.
+
+	queue, err := q.getQueue(tenantId, queueName)
+	if err != nil {
+		return err
+	}
+
+	queue.RateLimit = properties.RateLimit
+	queue.MaxRetries = properties.MaxRetries
+	queue.VisibilityTimeout = properties.VisibilityTimeout
+
+	// TODO: should we reset the rate limit table if the queue's rate limit changes?
+
+	res := q.DBG.Save(queue)
+
+	return res.Error
+}
+
+func (q *SQLiteQueue) GetQueue(tenantId int64, queueName string) (models.QueueProperties, error) {
+	queue := models.QueueProperties{}
+
+	properties, err := q.getQueue(tenantId, queueName)
+	if err != nil {
+		return queue, err
+	}
+
+	queue.Name = properties.Name
+	queue.RateLimit = properties.RateLimit
+	queue.MaxRetries = properties.MaxRetries
+	queue.VisibilityTimeout = properties.VisibilityTimeout
+
+	return queue, nil
 }
 
 func (q *SQLiteQueue) DeleteQueue(tenantId int64, queueName string) error {
@@ -342,9 +378,11 @@ func (q *SQLiteQueue) calculateRateLimit(queue *Queue, now int64, numToDequeue i
 		}
 	}
 
-	res := q.DBG.Where("tenant_id = ? AND queue_id = ? AND ts < ? - 1", queue.TenantID, queue.ID, bucketToCheck).Delete(&RateLimit{})
-	if res.Error != nil {
-		log.Warn().Int64("tenant_id", queue.TenantID).Int64("queue_id", queue.ID).Int64("ts", bucketToCheck).Msg("Unable to clear previous rate limits")
+	if queue.RateLimit > 0 {
+		res := q.DBG.Where("tenant_id = ? AND queue_id = ? AND ts < ? - 1", queue.TenantID, queue.ID, bucketToCheck).Delete(&RateLimit{})
+		if res.Error != nil {
+			log.Warn().Int64("tenant_id", queue.TenantID).Int64("queue_id", queue.ID).Int64("ts", bucketToCheck).Msg("Unable to clear previous rate limits")
+		}
 	}
 
 	return maxToDequeue, nil
@@ -356,7 +394,8 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 		return nil, err
 	}
 
-	if queue.Paused {
+	// Queue is "paused"
+	if queue.RateLimit == 0 {
 		return nil, nil
 	}
 

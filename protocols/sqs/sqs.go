@@ -250,7 +250,13 @@ func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
 		return err
 	}
 
-	err = s.queue.CreateQueue(tenantId, req.QueueName, 30)
+	properties := models.QueueProperties{
+		Name:              req.QueueName,
+		RateLimit:         -1,
+		MaxRetries:        -1,
+		VisibilityTimeout: 30,
+	}
+	err = s.queue.CreateQueue(tenantId, properties)
 
 	if errors.Is(err, models.ErrQueueExists) {
 		return ErrQueueNameExists

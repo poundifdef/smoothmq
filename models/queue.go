@@ -24,8 +24,17 @@ type FilterCriteria struct {
 	Limit int
 }
 
+type QueueProperties struct {
+	Name              string
+	RateLimit         float64
+	MaxRetries        int
+	VisibilityTimeout int
+}
+
 type Queue interface {
-	CreateQueue(tenantId int64, queue string, visibilityTimeout int) error
+	GetQueue(tenantId int64, queueName string) (QueueProperties, error)
+	CreateQueue(tenantId int64, properties QueueProperties) error
+	UpdateQueue(tenantId int64, queue string, properties QueueProperties) error
 	DeleteQueue(tenantId int64, queue string) error
 	ListQueues(tenantId int64) ([]string, error)
 
