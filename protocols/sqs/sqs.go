@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"net/http"
@@ -248,6 +249,19 @@ func (s *SQS) CreateQueue(c *fiber.Ctx, tenantId int64) error {
 	err := json.Unmarshal(c.Body(), req)
 	if err != nil {
 		return err
+	}
+
+	if len(req.QueueName) > 80 {
+		return ErrValidationError
+	}
+
+	regex, err := regexp.Compile(`^[a-zA-Z0-9-_]+$`)
+	if err != nil {
+		return err
+	}
+
+	if !regex.MatchString(req.QueueName) {
+		return ErrValidationError
 	}
 
 	properties := models.QueueProperties{
