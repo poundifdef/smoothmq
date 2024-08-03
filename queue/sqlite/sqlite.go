@@ -282,6 +282,74 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 	return messageId, nil
 }
 
+// Calculate how many messages to allow the user to dequeue based on queue's rate limit
+func (q *SQLiteQueue) calculateRateLimit(queue *Queue, now int64, numToDequeue int) (int, error) {
+	maxToDequeue := numToDequeue
+	bucketToCheck := now
+
+	// If the rate limit is less than 1 per second, meaning 1 message every n seconds
+	if queue.RateLimit > 0 && queue.RateLimit < 1 {
+		// Go back n seconds, check how many messages have been sent in that time period
+
+		limitReciprocal := 1.0 / queue.RateLimit
+		earliestBucket := now - int64(limitReciprocal) + 1
+
+		bucketToCheck = earliestBucket
+
+		sql := `
+			SELECT coalesce(cast(sum(n) as real) / (? - min(ts) + 1),0) FROM rate_limits
+			WHERE tenant_id = ? AND queue_id = ? AND ts >= ?
+			`
+
+		res := q.DBG.Raw(sql, now, queue.TenantID, queue.ID, earliestBucket)
+		if res.Error != nil {
+			return 0, res.Error
+		}
+
+		var messageRate float64
+
+		rateRes := res.Scan(&messageRate)
+		if rateRes.Error != nil {
+			return 0, rateRes.Error
+		}
+
+		if messageRate >= queue.RateLimit {
+			return 0, nil
+		}
+
+		maxToDequeue = 1
+	} else if queue.RateLimit >= 1 {
+		// Check how many messages were sent in current bucket
+		bucket := &RateLimit{}
+		res := q.DBG.Where("tenant_id = ? AND queue_id = ? AND ts = ?", queue.TenantID, queue.ID, now).FirstOrCreate(bucket)
+
+		if res.Error != nil && !errors.Is(res.Error, gorm.ErrDuplicatedKey) {
+			return 0, res.Error
+		}
+
+		if bucket.N >= int(queue.RateLimit) {
+			return 0, nil
+		}
+
+		allowedToDequeue := int(queue.RateLimit) - bucket.N
+		if allowedToDequeue < 0 {
+			allowedToDequeue = 0
+		}
+
+		maxToDequeue = min(numToDequeue, allowedToDequeue)
+		if maxToDequeue <= 0 {
+			return 0, nil
+		}
+	}
+
+	res := q.DBG.Where("tenant_id = ? AND queue_id = ? AND ts < ? - 1", queue.TenantID, queue.ID, bucketToCheck).Delete(&RateLimit{})
+	if res.Error != nil {
+		log.Warn().Int64("tenant_id", queue.TenantID).Int64("queue_id", queue.ID).Int64("ts", bucketToCheck).Msg("Unable to clear previous rate limits")
+	}
+
+	return maxToDequeue, nil
+}
+
 func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int, requeueIn int) ([]*models.Message, error) {
 	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
@@ -302,86 +370,10 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
-	maxToDequeue := numToDequeue
-	if queue.RateLimit > 0 && queue.RateLimit < 1 {
-
-	} else if queue.RateLimit >= 1 {
-		bucket := &RateLimit{}
-		q.DBG.Where("tenant_id = ? AND queue_id = ? AND ts = ?", tenantId, queue.ID, now).FirstOrCreate(bucket)
-		log.Info().Interface("bucket", bucket).Float64("rate_limit", queue.RateLimit).Send()
-
-		if bucket.N >= int(queue.RateLimit) {
-			return nil, nil
-		}
-
-		// 10, bucket 3, rate limit 5
-		allowedToDequeue := int(queue.RateLimit) - bucket.N
-		if allowedToDequeue < 0 {
-			allowedToDequeue = 0
-		}
-
-		maxToDequeue = min(numToDequeue, allowedToDequeue)
-		if maxToDequeue <= 0 {
-			return nil, nil
-		}
+	maxToDequeue, err := q.calculateRateLimit(queue, now, numToDequeue)
+	if err != nil {
+		return nil, err
 	}
-
-	// if queue.RateLimit > 0 {
-	// 	limitReciprocal := 1.0 / queue.RateLimit
-	// 	earliestBucket := now - int64(limitReciprocal) + 1
-
-	// 	sql := `
-	// 	SELECT coalesce(cast(sum(n) as real) / (? - min(ts) + 1),0) FROM rate_limits
-	// 	WHERE tenant_id = ? AND queue_id = ? AND ts >= ?
-	// 	`
-
-	// 	res := q.DBG.Debug().Raw(sql, now, tenantId, queue.ID, earliestBucket)
-	// 	fmt.Println(now, tenantId, queue.ID, earliestBucket)
-	// 	fmt.Println(res.Error)
-	// 	fmt.Println(res.RowsAffected)
-	// 	if res.Error != nil {
-	// 		return nil, res.Error
-	// 	}
-
-	// 	var messageRate float64
-
-	// 	r2 := res.Debug().Scan(&messageRate)
-	// 	fmt.Println(r2.Error)
-
-	// 	// messageRate := 0.0
-	// 	// if messageRateP != nil {
-	// 	// messageRate = *messageRateP
-	// 	// }
-
-	// 	fmt.Println(messageRate)
-
-	// 	if messageRate >= queue.RateLimit {
-	// 		return nil, nil
-	// 	}
-
-	// 	if queue.RateLimit < 1 && messageRate != 0 {
-	// 		return nil, nil
-	// 	}
-
-	// 	maxToDequeue = min(numToDequeue, int(math.Ceil(queue.RateLimit-messageRate)))
-	// 	// if queue.RateLimit < 1 {
-
-	// 	// }
-
-	// 	// if messageRate < 1 {
-	// 	// 	return nil, nil
-	// 	// }
-
-	// 	// res:=q.DBG.Where("tenant_id = ? AND queue_id = ? AND ts >= ?", tenantId, queue.ID, earliestBucket).Last(&bucket)
-
-	// 	// if res.RowsAffected== 0{
-	// 	// 	// Create bucket with value of 1
-
-	// 	// } else {
-	// 	// 	if bucket.N>=int(queue.RateLimit)
-	// 	// }
-
-	// }
 
 	var messages []Message
 
@@ -410,28 +402,39 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 		messageIDs[i] = message.ID
 	}
 
-	res = q.DBG.Model(&Message{}).Where("tenant_id = ? AND queue_id = ? AND id in ?", tenantId, queue.ID, messageIDs).
-		UpdateColumns(map[string]any{
-			"tries":        gorm.Expr("tries+1"),
-			"delivered_at": now,
-			"deliver_at":   gorm.Expr("?", now+int64(visibilityTimeout)),
-		})
+	err = q.DBG.Transaction(func(tx *gorm.DB) error {
+		res = tx.Model(&Message{}).Where("tenant_id = ? AND queue_id = ? AND id in ?", tenantId, queue.ID, messageIDs).
+			UpdateColumns(map[string]any{
+				"tries":        gorm.Expr("tries+1"),
+				"delivered_at": now,
+				"deliver_at":   gorm.Expr("?", now+int64(visibilityTimeout)),
+			})
 
-	if res.Error != nil {
-		return nil, res.Error
-	}
-
-	if queue.RateLimit > 0 {
-		bucket := RateLimit{
-			TenantID: tenantId,
-			QueueID:  queue.ID,
-			Ts:       now,
-			N:        len(messageIDs),
+		if res.Error != nil {
+			return res.Error
 		}
-		q.DBG.Debug().Clauses(clause.OnConflict{
-			// Columns:   []clause.Column{{Name: "id"}},
-			DoUpdates: clause.Assignments(map[string]interface{}{"n": gorm.Expr("n + ?", len(messageIDs))}),
-		}).Create(&bucket)
+
+		if queue.RateLimit > 0 {
+			bucket := RateLimit{
+				TenantID: tenantId,
+				QueueID:  queue.ID,
+				Ts:       now,
+				N:        len(messageIDs),
+			}
+			res = tx.Clauses(clause.OnConflict{
+				DoUpdates: clause.Assignments(map[string]interface{}{"n": gorm.Expr("n + ?", len(messageIDs))}),
+			}).Create(&bucket)
+
+			if res.Error != nil && !errors.Is(res.Error, gorm.ErrDuplicatedKey) {
+				return res.Error
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
 	for _, messageId := range messageIDs {
