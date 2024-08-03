@@ -3,7 +3,6 @@ package sqlite
 import (
 	"errors"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -264,7 +263,7 @@ func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
 
 func (q *SQLiteQueue) getQueue(tenantId int64, queueName string) (*Queue, error) {
 	rc := &Queue{}
-	res := q.DBG.Where("tenant_id = ? AND name = ?", tenantId, strings.ToLower(queueName)).First(rc)
+	res := q.DBG.Where("tenant_id = ? AND name = ?", tenantId, queueName).First(rc)
 	if res.RowsAffected != 1 {
 		return nil, errors.New("Queue not found")
 	}
