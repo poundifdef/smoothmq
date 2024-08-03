@@ -1,5 +1,9 @@
 package models
 
+import "errors"
+
+var ErrQueueExists = errors.New("Queue already exists")
+
 type FilterCriteria struct {
 	MessageID int64
 
