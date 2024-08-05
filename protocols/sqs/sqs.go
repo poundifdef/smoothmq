@@ -298,15 +298,24 @@ func (s *SQS) queueURL(c *fiber.Ctx, tenantId int64, queue string) string {
 
 }
 func (s *SQS) ListQueues(c *fiber.Ctx, tenantId int64) error {
+	req := &ListQueuesRequest{}
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return err
+	}
+
 	queues, err := s.queue.ListQueues(tenantId)
 	if err != nil {
 		return err
 	}
 
-	queueUrls := make([]string, len(queues))
+	queueUrls := make([]string, 0)
 
-	for i, queue := range queues {
-		queueUrls[i] = s.queueURL(c, tenantId, queue)
+	for _, queue := range queues {
+		if req.QueueNamePrefix != "" && !strings.HasPrefix(queue, req.QueueNamePrefix) {
+			continue
+		}
+		queueUrls = append(queueUrls, s.queueURL(c, tenantId, queue))
 	}
 
 	rc := ListQueuesResponse{
