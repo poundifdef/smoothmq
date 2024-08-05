@@ -40,6 +40,7 @@ type Queue interface {
 
 	Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error)
 	Dequeue(tenantId int64, queue string, numToDequeue int, requeueIn int) ([]*Message, error)
+	UpdateMessage(tenantId int64, queue string, messageId int64, m Message) (Message, error)
 
 	Peek(tenantId int64, queue string, messageId int64) *Message
 	Stats(tenantId int64, queue string) QueueStats

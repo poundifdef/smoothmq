@@ -317,6 +317,10 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 	return messageId, nil
 }
 
+func (q *SQLiteQueue) UpdateMessage(tenantId int64, queue string, messageId int64, m models.Message) (models.Message, error) {
+	return models.Message{}, nil
+}
+
 // Calculate how many messages to allow the user to dequeue based on queue's rate limit
 func (q *SQLiteQueue) calculateRateLimit(queue *Queue, now int64, numToDequeue int) (int, error) {
 	maxToDequeue := numToDequeue
