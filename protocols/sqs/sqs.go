@@ -185,6 +185,8 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 		rc = s.GetQueueAttributes(c, tenantId)
 	case "AmazonSQS.PurgeQueue":
 		rc = s.PurgeQueue(c, tenantId)
+	case "AmazonSQS.ChangeMessageVisibility":
+		rc = s.ChangeMessageVisibility(c, tenantId)
 	default:
 		rc = NewSQSError(400, "UnsupportedOperation", fmt.Sprintf("SQS method %s not implemented", awsMethod))
 	}
@@ -592,4 +594,46 @@ func (s *SQS) DeleteMessage(c *fiber.Ctx, tenantId int64) error {
 	}
 
 	return nil
+}
+
+func (s *SQS) ChangeMessageVisibility(c *fiber.Ctx, tenantId int64) error {
+	req := &ChangeMessageVisibilityRequest{}
+
+	err := json.Unmarshal(c.Body(), req)
+	if err != nil {
+		return err
+	}
+
+	tokens := strings.Split(req.QueueUrl, "/")
+	queue := tokens[len(tokens)-1]
+
+	messageId, err := strconv.ParseInt(req.ReceiptHandle, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	// Fetch the message
+	message := s.queue.Peek(tenantId, queue, messageId)
+	if message == nil {
+		return NewSQSError(400, "InvalidAddress", "The specified message does not exist.")
+	}
+
+	if message.Status() != models.MessageStatusDequeued {
+		return NewSQSError(400, "MessageNotInFlight", "The message is not in flight")
+	}
+
+	// Calculate the new delivery time in Unix timestamp (seconds)
+	newDeliverAt := time.Now().Add(time.Duration(req.VisibilityTimeout) * time.Second).Unix()
+
+	// Update the message's DeliverAt time
+	message.DeliverAt = int(newDeliverAt)
+
+	// Update the message in the queue
+	err = s.queue.UpdateMessage(tenantId, queue, messageId, message)
+	if err != nil {
+		return err
+	}
+
+	// Return an empty response as per SQS specification
+	return c.JSON(ChangeMessageVisibilityResponse{})
 }

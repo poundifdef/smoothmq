@@ -317,8 +317,22 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 	return messageId, nil
 }
 
-func (q *SQLiteQueue) UpdateMessage(tenantId int64, queue string, messageId int64, m models.Message) (models.Message, error) {
-	return models.Message{}, nil
+func (q *SQLiteQueue) UpdateMessage(tenantId int64, queue string, messageId int64, m *models.Message) error {
+	q.Mu.Lock()
+	defer q.Mu.Unlock()
+
+	result := q.DBG.Model(&Message{}).
+		Where("tenant_id = ? AND queue_id = (SELECT id FROM queues WHERE tenant_id = ? AND name = ?) AND id = ?", tenantId, tenantId, queue, messageId).
+		Update("deliver_at", m.DeliverAt)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return errors.New("message not found")
+	}
+	return nil
 }
 
 // Calculate how many messages to allow the user to dequeue based on queue's rate limit

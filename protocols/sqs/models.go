@@ -1,5 +1,14 @@
 package sqs
 
+type ChangeMessageVisibilityRequest struct {
+    QueueUrl          string `json:"QueueUrl"`
+    ReceiptHandle     string `json:"ReceiptHandle"`
+    VisibilityTimeout int    `json:"VisibilityTimeout"`
+}
+
+type ChangeMessageVisibilityResponse struct {
+}
+
 type SendMessagePayload struct {
 	QueueUrl               string                           `json:"QueueUrl"`
 	MessageBody            string                           `json:"MessageBody"`
