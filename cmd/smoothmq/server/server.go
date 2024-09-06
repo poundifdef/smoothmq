@@ -1,11 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
@@ -18,7 +20,33 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+func recordTelemetry(message string, disabled bool) {
+	if disabled {
+		return
+	}
+
+	url := "https://telemetry.fly.dev"
+	jsonData := []byte(message)
+
+	client := &http.Client{
+		Timeout: 100 * time.Millisecond,
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+
+	resp.Body.Close()
+}
+
 func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) {
+	recordTelemetry("start", cfg.DisableTelemetry)
 
 	// Initialize default tenant manager
 	if tm == nil {
@@ -89,4 +117,5 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 	}
 
 	queue.Shutdown()
+	recordTelemetry("stop", cfg.DisableTelemetry)
 }
