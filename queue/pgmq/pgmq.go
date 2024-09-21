@@ -189,7 +189,9 @@ func (q *PGMQQueue) Filter(tenantId int64, queue string, filterCriteria models.F
 }
 
 func (q *PGMQQueue) Delete(tenantId int64, queue string, messageId int64) error {
-	return nil
+	queueName := buildTenantQueueName(tenantId, queue)
+	_, err := q.PGMQ.Delete(context.TODO(), queueName, messageId)
+	return err
 }
 
 func (q *PGMQQueue) Shutdown() error {
