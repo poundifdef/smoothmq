@@ -31,6 +31,7 @@ type ServerCommand struct {
 	SQS       SQSConfig       `embed:"" prefix:"sqs-" envprefix:"Q_SQS_"`
 	Dashboard DashboardConfig `embed:"" prefix:"dashboard-" envprefix:"Q_DASHBOARD_"`
 	SQLite    SQLiteConfig    `embed:"" prefix:"sqlite-" envprefix:"Q_SQLITE_"`
+	PGMQ      PGMQConfig      `embed:"" prefix:"pgmq-" envprefix:"Q_PGMQ_"`
 	Metrics   MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"Q_METRICS_"`
 
 	DisableTelemetry bool `name:"disable-telemetry" default:"false" env:"DISABLE_TELEMETRY"`
@@ -51,6 +52,10 @@ type MetricsConfig struct {
 
 type SQLiteConfig struct {
 	Path string `name:"path" help:"Path of SQLite file" default:"smoothmq.sqlite" env:"PATH"`
+}
+
+type PGMQConfig struct {
+	Uri string `name:"uri" help:"PostgreSQL connection string" env:"URI"`
 }
 
 type SQSConfig struct {

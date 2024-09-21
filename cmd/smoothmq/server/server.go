@@ -15,6 +15,7 @@ import (
 	"github.com/poundifdef/smoothmq/dashboard"
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/poundifdef/smoothmq/protocols/sqs"
+	"github.com/poundifdef/smoothmq/queue/pgmq"
 	"github.com/poundifdef/smoothmq/queue/sqlite"
 	"github.com/poundifdef/smoothmq/tenants/defaultmanager"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -52,6 +53,11 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 	if tm == nil {
 		tm = defaultmanager.NewDefaultTenantManager(cfg.SQS.Keys)
 	}
+
+  // Initialize PGMQ when configured
+  if queue == nil && cfg.PGMQ.Uri != "" {
+    queue = pgmq.NewPGMQQueue(cfg.PGMQ)
+  }
 
 	// Initialize default queue implementation
 	if queue == nil {
