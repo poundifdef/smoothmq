@@ -2,12 +2,16 @@ package pgmq
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/craigpastro/pgmq-go"
+	"github.com/jackc/pgtype"
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/rs/zerolog/log"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type Envelope struct {
@@ -15,25 +19,45 @@ type Envelope struct {
 	Headers map[string]string `json:"headers"`
 }
 
+type MessageRow struct {
+	MsgID int64 `gorm:"not null,primaryKey,column:msg_id"`
+	Message pgtype.JSONB `gorm:"type:jsonb"`
+}
+
 type PGMQQueue struct {
+	DB *gorm.DB
 	PGMQ *pgmq.PGMQ
 }
 
 func NewPGMQQueue(cfg config.PGMQConfig) (*PGMQQueue, error) {
 	log.Info().Msg("Initializing pgmq backend")
+	db, err := gorm.Open(postgres.Open(cfg.Uri), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
 	impl, err := pgmq.New(context.Background(), cfg.Uri)
 	if err != nil {
 		return nil, err
 	}
 	driver := &PGMQQueue{
+		DB: db,
 		PGMQ: impl,
 	}
 	return driver, nil
 }
 
+// Returns a wrapped, PostgreSQL safe queue name in the tenant namespace
 func buildTenantQueueName(tenantId int64, queueName string) string {
-	return fmt.Sprintf("q_%x_%s", uint64(tenantId), queueName)
+	safeQueueName := base64.URLEncoding.EncodeToString([]byte(queueName))
+	return fmt.Sprintf("tnt_%x_%s", uint64(tenantId), safeQueueName)
 }
+
+// Returns the name of the underlying pqmq table
+func buildTenantQueueTableName(tenantId int64, queueName string) string {
+	safeQueueName := base64.URLEncoding.EncodeToString([]byte(queueName))
+	return fmt.Sprintf("pgmq.\"q_tnt_%x_%s\"", uint64(tenantId), safeQueueName)
+}
+
 
 func toMessage(tenantId int64, in *pgmq.Message) (*models.Message, error) {
 	var envelope Envelope
@@ -51,6 +75,26 @@ func toMessage(tenantId int64, in *pgmq.Message) (*models.Message, error) {
 		//Tries:       message.Tries,
 		//MaxTries:    message.MaxTries,
 		Message:   []byte(envelope.Body),
+		KeyValues: envelope.Headers,
+	}, nil
+}
+
+func rowToMessage(tenantId int64, in *MessageRow) (*models.Message, error) {
+	var envelope Envelope
+	err := in.Message.AssignTo(&envelope)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.Message {
+		ID: in.MsgID,
+		TenantID: tenantId,
+		//QueueID:  message.QueueID,
+		//DeliverAt:   int(message.DeliverAt),
+		//DeliveredAt: int(message.DeliveredAt),
+		//Tries:       message.Tries,
+		//MaxTries:    message.MaxTries,
+		Message: []byte(envelope.Body),
 		KeyValues: envelope.Headers,
 	}, nil
 }
@@ -122,7 +166,17 @@ func (q *PGMQQueue) Dequeue(tenantId int64, queue string, numToDequeue int, requ
 }
 
 func (q *PGMQQueue) Peek(tenantId int64, queue string, messageId int64) *models.Message {
-	return nil
+	table := buildTenantQueueTableName(tenantId, queue)
+	row := MessageRow{}
+	q.DB.Table(table).First(&row, "msg_id = ?", messageId)
+	if row.MsgID == 0 {
+		return nil
+	}
+	msg, err := rowToMessage(tenantId, &row)
+	if err != nil {
+		panic(err)
+	}
+	return msg
 }
 
 func (q *PGMQQueue) Stats(tenantId int64, queue string) models.QueueStats {
