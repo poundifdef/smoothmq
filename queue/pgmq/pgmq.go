@@ -1,6 +1,7 @@
 package pgmq
 
 import (
+	"context"
 	"github.com/craigpastro/pgmq-go"
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
@@ -11,9 +12,16 @@ type PGMQQueue struct {
 	PGMQ *pgmq.PGMQ
 }
 
-func NewPGMQQueue(cfg config.PGMQConfig) *PGMQQueue {
+func NewPGMQQueue(cfg config.PGMQConfig) (*PGMQQueue, error) {
 	log.Info().Msg("Initializing pgmq backend")
-	return &PGMQQueue{}
+	impl, err := pgmq.New(context.Background(), cfg.Uri)
+	if err != nil {
+		return nil, err
+	}
+	driver := &PGMQQueue{
+		PGMQ: impl,
+	}
+	return driver, nil
 }
 
 func (q *PGMQQueue) GetQueue(tenantId int64, queueName string) (models.QueueProperties, error) {
@@ -63,5 +71,6 @@ func (q *PGMQQueue) Delete(tenantId int64, queue string, messageId int64) error 
 }
 
 func (q *PGMQQueue) Shutdown() error {
+	q.PGMQ.Close()
 	return nil
 }
