@@ -54,10 +54,14 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 		tm = defaultmanager.NewDefaultTenantManager(cfg.SQS.Keys)
 	}
 
-  // Initialize PGMQ when configured
-  if queue == nil && cfg.PGMQ.Uri != "" {
-    queue = pgmq.NewPGMQQueue(cfg.PGMQ)
-  }
+	// Initialize PGMQ when configured
+	if queue == nil && cfg.PGMQ.Uri != "" {
+		_queue, err := pgmq.NewPGMQQueue(cfg.PGMQ)
+		if err != nil {
+			panic(err)
+		}
+		queue = _queue
+	}
 
 	// Initialize default queue implementation
 	if queue == nil {
