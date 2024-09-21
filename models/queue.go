@@ -41,6 +41,7 @@ type Queue interface {
 	Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error)
 	Dequeue(tenantId int64, queue string, numToDequeue int, requeueIn int) ([]*Message, error)
 
+	// TODO: Peek should include an error on return
 	Peek(tenantId int64, queue string, messageId int64) *Message
 	Stats(tenantId int64, queue string) QueueStats
 	Filter(tenantId int64, queue string, filterCriteria FilterCriteria) []int64
