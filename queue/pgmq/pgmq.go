@@ -1,13 +1,14 @@
 package pgmq
 
 import (
+	"github.com/craigpastro/pgmq-go"
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/rs/zerolog/log"
 )
 
 type PGMQQueue struct {
-
+	PGMQ *pgmq.PGMQ
 }
 
 func NewPGMQQueue(cfg config.PGMQConfig) *PGMQQueue {
