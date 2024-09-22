@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"github.com/craigpastro/pgmq-go"
 	"github.com/jackc/pgtype"
 	"github.com/poundifdef/smoothmq/config"
@@ -22,6 +24,10 @@ type Envelope struct {
 type MessageRow struct {
 	MsgID int64 `gorm:"not null,primaryKey,column:msg_id"`
 	Message pgtype.JSONB `gorm:"type:jsonb"`
+}
+
+type MetaRow struct {
+	QueueName string `gorm:"not null,column:queue_name"`
 }
 
 type PGMQQueue struct {
@@ -46,10 +52,31 @@ func NewPGMQQueue(cfg config.PGMQConfig) (*PGMQQueue, error) {
 	return driver, nil
 }
 
+var base64Encoder *base64.Encoding = base64.URLEncoding.WithPadding(base64.NoPadding)
+
 // Returns a wrapped, PostgreSQL safe queue name in the tenant namespace
 func buildTenantQueueName(tenantId int64, queueName string) string {
-	safeQueueName := base64.URLEncoding.EncodeToString([]byte(queueName))
+	safeQueueName := base64Encoder.EncodeToString([]byte(queueName))
 	return fmt.Sprintf("tnt_%x_%s", uint64(tenantId), safeQueueName)
+}
+
+// Parses a wrapped queue name
+func parseTenantQueueName(queueName string) (int64, string, error) {
+    parts := strings.SplitN(queueName, "_", 3)
+    if len(parts) != 3 || parts[0] != "tnt" {
+        return 0, "", fmt.Errorf("Invalid queue name")
+    }
+
+    uTenantId, err := strconv.ParseUint(parts[1], 16, 64)
+    if err != nil {
+        return 0, "", fmt.Errorf("Error parsing tenant ID: %w", err)
+    }
+
+	queueNameBytes, err := base64Encoder.DecodeString(parts[2])
+	if err != nil {
+		return 0, "", err
+	}
+	return int64(uTenantId), string(queueNameBytes), nil
 }
 
 // Returns the name of the underlying pqmq table
@@ -121,7 +148,23 @@ func (q *PGMQQueue) DeleteQueue(tenantId int64, queue string) error {
 }
 
 func (q *PGMQQueue) ListQueues(tenantId int64) ([]string, error) {
-	return nil, nil
+	rows := []MetaRow{}
+	pattern := fmt.Sprintf("tnt_%x_%%", uint64(tenantId))
+	query := q.DB.Table("pgmq.meta").Find(&rows, "queue_name LIKE ?", pattern)
+	if query.Error != nil {
+		return nil, query.Error
+	}
+	queueNames := make([]string, len(rows))
+	for i, row := range rows {
+		qTenantId, queueName, err := parseTenantQueueName(row.QueueName)
+		if err != nil {
+			return nil, err
+		}
+		if qTenantId == tenantId {
+			queueNames[i] = queueName
+		}
+	}
+	return queueNames, nil
 }
 
 func (q *PGMQQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error) {
@@ -168,7 +211,10 @@ func (q *PGMQQueue) Dequeue(tenantId int64, queue string, numToDequeue int, requ
 func (q *PGMQQueue) Peek(tenantId int64, queue string, messageId int64) *models.Message {
 	table := buildTenantQueueTableName(tenantId, queue)
 	row := MessageRow{}
-	q.DB.Table(table).First(&row, "msg_id = ?", messageId)
+	query := q.DB.Table(table).First(&row, "msg_id = ?", messageId)
+	if query.Error != nil {
+		panic(query.Error)
+	}
 	if row.MsgID == 0 {
 		return nil
 	}
