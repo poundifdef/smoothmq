@@ -263,7 +263,36 @@ func (q *PGMQQueue) Stats(tenantId int64, queue string) models.QueueStats {
 }
 
 func (q *PGMQQueue) Filter(tenantId int64, queue string, filterCriteria models.FilterCriteria) []int64 {
-	return nil
+	var messageIds []int64
+
+	tableName := buildTenantQueueTableName(tenantId, queue)
+
+	args := make([]any, 0)
+
+	whereConditions := make([]string, 0)
+
+	if filterCriteria.MessageID > 0 {
+		whereConditions = append(whereConditions, "msg_id = ?")
+		args = append(args, filterCriteria.MessageID)
+	}
+
+	for k, v := range filterCriteria.KV {
+		whereConditions = append(whereConditions, "message->'headers'->>? = ?")
+		args = append(args, k, v)
+	}
+
+	whereClause := ""
+	if len(whereConditions) >0 {
+		whereClause = "WHERE " + strings.Join(whereConditions, " AND ")
+	}
+
+	sql := fmt.Sprintf("SELECT msg_id FROM %s %s LIMIT 10", tableName, whereClause)
+	res := q.DB.Raw(sql, args...).Scan(&messageIds)
+	if res.Error != nil {
+		log.Error().Err(res.Error).Msg("Unable to filter")
+	}
+
+	return messageIds
 }
 
 func (q *PGMQQueue) Delete(tenantId int64, queue string, messageId int64) error {
