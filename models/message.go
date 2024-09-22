@@ -35,6 +35,8 @@ type Message struct {
 	TenantID int64 `db:"tenant_id"`
 	QueueID  int64 `db:"queue_id"`
 
+	// FIXME: DeliverAt and DeliveredAt should use int64
+	// for Unix timestamps to prevent overflow in 2038
 	DeliverAt   int `db:"deliver_at"`
 	DeliveredAt int `db:"delivered_at"`
 	Tries       int `db:"tries"`
