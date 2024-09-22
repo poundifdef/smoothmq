@@ -81,7 +81,11 @@ func parseTenantQueueName(queueName string) (int64, string, error) {
 
 // Returns the name of the underlying pqmq table
 func buildTenantQueueTableName(tenantId int64, queueName string) string {
-	safeQueueName := base64.URLEncoding.EncodeToString([]byte(queueName))
+	// pgmq does not quote table names in its implementation,
+	// so table names are not case sensitive.
+	// It is possible for two table names to collide with the same
+	// case-insensitive base64 encoding.
+	safeQueueName := strings.ToLower(base64Encoder.EncodeToString([]byte(queueName)))
 	return fmt.Sprintf("pgmq.\"q_tnt_%x_%s\"", uint64(tenantId), safeQueueName)
 }
 
@@ -226,7 +230,35 @@ func (q *PGMQQueue) Peek(tenantId int64, queue string, messageId int64) *models.
 }
 
 func (q *PGMQQueue) Stats(tenantId int64, queue string) models.QueueStats {
-	stats := models.QueueStats{}
+	stats := models.QueueStats{
+		Counts:        make(map[models.MessageStatus]int),
+		TotalMessages: 0,
+	}
+
+	table := buildTenantQueueTableName(tenantId, queue)
+	sql := fmt.Sprintf(`
+		SELECT
+		CASE
+			WHEN read_ct > 0 AND CURRENT_TIMESTAMP < vt THEN 2
+			ELSE 1
+		END AS s, count(*) FROM %s GROUP BY s
+	`, table)
+	res := q.DB.Raw(sql)
+	rows, err := res.Rows()
+
+	if err != nil {
+		return stats
+	}
+
+	for rows.Next() {
+		var statusType models.MessageStatus
+		var count int
+		rows.Scan(&statusType, &count)
+		stats.TotalMessages += count
+		stats.Counts[statusType] = count
+	}
+	rows.Close()
+
 	return stats
 }
 
