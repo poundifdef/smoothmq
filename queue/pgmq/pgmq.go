@@ -24,6 +24,9 @@ type Envelope struct {
 type MessageRow struct {
 	MsgID int64 `gorm:"not null,primaryKey,column:msg_id"`
 	Message pgtype.JSONB `gorm:"type:jsonb"`
+	ReadCount int `gorm:"not null,column:read_ct"`
+	// Visibility timeout
+	VT pgtype.Timestamptz `gorm:"not null,column:vt"`
 }
 
 type MetaRow struct {
@@ -98,13 +101,12 @@ func toMessage(tenantId int64, in *pgmq.Message) (*models.Message, error) {
 	}
 
 	return &models.Message {
-		ID:       in.MsgID,
-		TenantID: tenantId,
-		//QueueID:  message.QueueID,
-		//DeliverAt:   int(message.DeliverAt),
-		//DeliveredAt: int(message.DeliveredAt),
-		//Tries:       message.Tries,
-		//MaxTries:    message.MaxTries,
+		ID:        in.MsgID,
+		TenantID:  tenantId,
+		DeliverAt: int(in.VT.Unix()),
+		Tries:     int(in.ReadCount),
+		// pgmq has no max retry count; it's always n + 1 here.
+		MaxTries:  int(in.ReadCount) + 1,
 		Message:   []byte(envelope.Body),
 		KeyValues: envelope.Headers,
 	}, nil
@@ -118,14 +120,13 @@ func rowToMessage(tenantId int64, in *MessageRow) (*models.Message, error) {
 	}
 
 	return &models.Message {
-		ID: in.MsgID,
-		TenantID: tenantId,
-		//QueueID:  message.QueueID,
-		//DeliverAt:   int(message.DeliverAt),
-		//DeliveredAt: int(message.DeliveredAt),
-		//Tries:       message.Tries,
-		//MaxTries:    message.MaxTries,
-		Message: []byte(envelope.Body),
+		ID:        in.MsgID,
+		TenantID:  tenantId,
+		DeliverAt: int(in.VT.Time.Unix()),
+		Tries:     int(in.ReadCount),
+		// pgmq has no max retry count; it's always n + 1 here.
+		MaxTries:  int(in.ReadCount) + 1,
+		Message:   []byte(envelope.Body),
 		KeyValues: envelope.Headers,
 	}, nil
 }
