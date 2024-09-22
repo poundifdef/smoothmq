@@ -23,8 +23,6 @@ import (
 func Run(c smoothCfg.TesterCommand) {
 	var sentMessages, receivedMessages int
 
-	queueUrl := "https://sqs.us-east-1.amazonaws.com/123/test-queue"
-
 	// Load the AWS configuration with hardcoded credentials
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("us-east-1"),
@@ -42,6 +40,8 @@ func Run(c smoothCfg.TesterCommand) {
 	var wg sync.WaitGroup
 
 	var ch chan int
+
+	queueUrl := createQueue(sqsClient)
 
 	for i := 0; i < c.Senders; i++ {
 		wg.Add(1)
@@ -94,6 +94,18 @@ func GenerateRandomString(n int) string {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+func createQueue(client *sqs.Client) string {
+	queueName := fmt.Sprintf("test-queue-%d", rand.Int())
+	i := &sqs.CreateQueueInput{
+		QueueName: &queueName,
+	}
+	result, err := client.CreateQueue(context.TODO(), i)
+	if err != nil {
+		log.Error().Err(err).Send()
+	}
+	return *result.QueueUrl
 }
 
 func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, batchSize, delaySeconds int) {
