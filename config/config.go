@@ -31,6 +31,7 @@ type ServerCommand struct {
 	SQS       SQSConfig       `embed:"" prefix:"sqs-" envprefix:"Q_SQS_"`
 	Dashboard DashboardConfig `embed:"" prefix:"dashboard-" envprefix:"Q_DASHBOARD_"`
 	SQLite    SQLiteConfig    `embed:"" prefix:"sqlite-" envprefix:"Q_SQLITE_"`
+	DB        DBConfig        `embed:"" prefix:"db-" envprefix:"Q_DB_"`
 	Metrics   MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"Q_METRICS_"`
 
 	DisableTelemetry bool `name:"disable-telemetry" default:"false" env:"DISABLE_TELEMETRY"`
@@ -51,6 +52,12 @@ type MetricsConfig struct {
 
 type SQLiteConfig struct {
 	Path string `name:"path" help:"Path of SQLite file" default:"smoothmq.sqlite" env:"PATH"`
+}
+
+type DBConfig struct {
+	DSN        string `name:"dsn" help:"GORM connection DSN" default:"" env:"DSN"`
+	Driver     string `name:"driver" help:"DB driver to use" default:"sqlite" env:"DSN"`
+	LogQueries bool   `name:"log-queries" default:"false" help:"Log queries" env:"LOG_QUERIES"`
 }
 
 type SQSConfig struct {

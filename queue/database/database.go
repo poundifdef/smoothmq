@@ -1,41 +1,28 @@
-package sqlite
+package database
 
 import (
 	"errors"
-	"os"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/bwmarrin/snowflake"
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
-
 	"github.com/rs/zerolog/log"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"github.com/bwmarrin/snowflake"
-	_ "github.com/mattn/go-sqlite3"
-
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
-type SQLiteQueue struct {
+type DBQueue struct {
 	Filename string
 	DBG      *gorm.DB
 	Mu       *sync.Mutex
 	snow     *snowflake.Node
 	ticker   *time.Ticker
 }
-
-var queueDiskSize = promauto.NewGauge(
-	prometheus.GaugeOpts{
-		Name: "queue_disk_size",
-		Help: "Size of queue data on disk",
-	},
-)
 
 type Queue struct {
 	ID                int64   `gorm:"primaryKey;autoIncrement:false"`
@@ -60,7 +47,7 @@ type Message struct {
 
 	Message string `gorm:"not null"`
 
-	KV []KV `gorm:"foreignKey:TenantID,QueueID,MessageID;references:TenantID,QueueID,ID"`
+	KV []KV `gorm:"foreignKey:MessageID;references:ID"`
 }
 
 func (message *Message) ToModel() *models.Message {
@@ -100,61 +87,77 @@ type RateLimit struct {
 	N        int   `gorm:"not null;default:0"`
 }
 
-func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
+func NewQueue(cfg config.ServerCommand) *DBQueue {
 	snow, err := snowflake.NewNode(1)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
 
-	db, err := gorm.Open(sqlite.Open(cfg.Path+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full"), &gorm.Config{TranslateError: true})
-	if err != nil {
-		log.Fatal().Err(err).Send()
+	gcfg := &gorm.Config{TranslateError: true}
+
+	if cfg.DB.LogQueries {
+		gcfg.Logger = logger.Default.LogMode(logger.Info)
 	}
 
-	err = db.AutoMigrate(&Queue{})
-	if err != nil {
-		log.Fatal().Err(err).Send()
+	dbq := &DBQueue{
+		Mu:   &sync.Mutex{},
+		snow: snow,
 	}
 
-	err = db.AutoMigrate(&Message{})
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-
-	err = db.AutoMigrate(&KV{})
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-
-	err = db.AutoMigrate(&RateLimit{})
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-
-	rc := &SQLiteQueue{
-		Filename: cfg.Path,
-		DBG:      db,
-		Mu:       &sync.Mutex{},
-		snow:     snow,
-		ticker:   time.NewTicker(1 * time.Second),
-	}
-
-	go func() {
-		for {
-			select {
-			case <-rc.ticker.C:
-				stat, err := os.Stat(rc.Filename)
-				if err == nil {
-					queueDiskSize.Set(float64(stat.Size()))
-				}
-			}
+	if cfg.DB.DSN == "" {
+		NewSQLiteQueue(cfg, dbq, gcfg)
+	} else {
+		switch cfg.DB.Driver {
+		case "postgres":
+			NewDBQueue(cfg.DB, dbq, gcfg)
+		case "sqlite":
+			NewSQLiteQueue(cfg, dbq, gcfg)
 		}
-	}()
+	}
 
-	return rc
+	return dbq
 }
 
-func (q *SQLiteQueue) CreateQueue(tenantId int64, properties models.QueueProperties) error {
+func NewDBQueue(cfg config.DBConfig, dbq *DBQueue, gcfg *gorm.Config) {
+	var err error
+
+	switch cfg.Driver {
+	case "postgres":
+		dbq.DBG, err = gorm.Open(postgres.Open(cfg.DSN), gcfg)
+	default:
+		err = errors.New(fmt.Sprintf("Unknown database driver %s", cfg.Driver))
+	}
+
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	dbq.Migrate()
+}
+
+func (q *DBQueue) Migrate() {
+	err := q.DBG.AutoMigrate(&Queue{})
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	err = q.DBG.AutoMigrate(&Message{})
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	err = q.DBG.AutoMigrate(&KV{})
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	err = q.DBG.AutoMigrate(&RateLimit{})
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+}
+
+func (q *DBQueue) CreateQueue(tenantId int64, properties models.QueueProperties) error {
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
@@ -178,7 +181,7 @@ func (q *SQLiteQueue) CreateQueue(tenantId int64, properties models.QueuePropert
 	return res.Error
 }
 
-func (q *SQLiteQueue) UpdateQueue(tenantId int64, queueName string, properties models.QueueProperties) error {
+func (q *DBQueue) UpdateQueue(tenantId int64, queueName string, properties models.QueueProperties) error {
 	q.Mu.Lock()
 	defer q.Mu.Unlock()
 
@@ -200,7 +203,7 @@ func (q *SQLiteQueue) UpdateQueue(tenantId int64, queueName string, properties m
 	return res.Error
 }
 
-func (q *SQLiteQueue) GetQueue(tenantId int64, queueName string) (models.QueueProperties, error) {
+func (q *DBQueue) GetQueue(tenantId int64, queueName string) (models.QueueProperties, error) {
 	queue := models.QueueProperties{}
 
 	properties, err := q.getQueue(tenantId, queueName)
@@ -216,7 +219,7 @@ func (q *SQLiteQueue) GetQueue(tenantId int64, queueName string) (models.QueuePr
 	return queue, nil
 }
 
-func (q *SQLiteQueue) DeleteQueue(tenantId int64, queueName string) error {
+func (q *DBQueue) DeleteQueue(tenantId int64, queueName string) error {
 	// Delete all messages with the queue, and then the queue itself
 
 	queue, err := q.getQueue(tenantId, queueName)
@@ -246,7 +249,7 @@ func (q *SQLiteQueue) DeleteQueue(tenantId int64, queueName string) error {
 	return rc
 }
 
-func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
+func (q *DBQueue) ListQueues(tenantId int64) ([]string, error) {
 	var queues []Queue
 	res := q.DBG.Where("tenant_id = ?", tenantId).Select("name").Find(&queues)
 	if res.Error != nil {
@@ -261,7 +264,7 @@ func (q *SQLiteQueue) ListQueues(tenantId int64) ([]string, error) {
 	return rc, nil
 }
 
-func (q *SQLiteQueue) getQueue(tenantId int64, queueName string) (*Queue, error) {
+func (q *DBQueue) getQueue(tenantId int64, queueName string) (*Queue, error) {
 	rc := &Queue{}
 	res := q.DBG.Where("tenant_id = ? AND name = ?", tenantId, queueName).First(rc)
 	if res.RowsAffected != 1 {
@@ -270,7 +273,7 @@ func (q *SQLiteQueue) getQueue(tenantId int64, queueName string) (*Queue, error)
 	return rc, res.Error
 }
 
-func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, kv map[string]string, delay int) (int64, error) {
+func (q *DBQueue) Enqueue(tenantId int64, queueName string, message string, kv map[string]string, delay int) (int64, error) {
 	messageSnow := q.snow.Generate()
 	messageId := messageSnow.Int64()
 
@@ -318,7 +321,7 @@ func (q *SQLiteQueue) Enqueue(tenantId int64, queueName string, message string, 
 }
 
 // Calculate how many messages to allow the user to dequeue based on queue's rate limit
-func (q *SQLiteQueue) calculateRateLimit(queue *Queue, now int64, numToDequeue int) (int, error) {
+func (q *DBQueue) calculateRateLimit(queue *Queue, now int64, numToDequeue int) (int, error) {
 	maxToDequeue := numToDequeue
 	bucketToCheck := now
 
@@ -387,7 +390,7 @@ func (q *SQLiteQueue) calculateRateLimit(queue *Queue, now int64, numToDequeue i
 	return maxToDequeue, nil
 }
 
-func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int, requeueIn int) ([]*models.Message, error) {
+func (q *DBQueue) Dequeue(tenantId int64, queueName string, numToDequeue int, requeueIn int) ([]*models.Message, error) {
 	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return nil, err
@@ -415,7 +418,10 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 
 	var messages []Message
 
-	res := q.DBG.Preload("KV").Where(
+	tx := q.DBG.Begin()
+	defer tx.Rollback()
+
+	res := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).Preload("KV").Where(
 		"deliver_at <= ? AND delivered_at <= ? AND (tries < max_tries OR max_tries = -1) AND tenant_id = ? AND queue_id = ?",
 		now, now, tenantId, queue.ID).
 		Limit(maxToDequeue).
@@ -440,49 +446,43 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 		messageIDs[i] = message.ID
 	}
 
-	err = q.DBG.Transaction(func(tx *gorm.DB) error {
-		res = tx.Model(&Message{}).Where("tenant_id = ? AND queue_id = ? AND id in ?", tenantId, queue.ID, messageIDs).
-			UpdateColumns(map[string]any{
-				"tries":        gorm.Expr("tries+1"),
-				"delivered_at": now,
-				"deliver_at":   gorm.Expr("?", now+int64(visibilityTimeout)),
-			})
+	res = tx.Model(&Message{}).Where("tenant_id = ? AND queue_id = ? AND id in ?", tenantId, queue.ID, messageIDs).
+		UpdateColumns(map[string]any{
+			"tries":        gorm.Expr("tries+1"),
+			"delivered_at": now,
+			"deliver_at":   gorm.Expr("?", now+int64(visibilityTimeout)),
+		})
 
-		if res.Error != nil {
-			return res.Error
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
+	if queue.RateLimit > 0 {
+		bucket := RateLimit{
+			TenantID: tenantId,
+			QueueID:  queue.ID,
+			Ts:       now,
+			N:        len(messageIDs),
 		}
+		res = tx.Clauses(clause.OnConflict{
+			DoUpdates: clause.Assignments(map[string]interface{}{"n": gorm.Expr("n + ?", len(messageIDs))}),
+		}).Create(&bucket)
 
-		if queue.RateLimit > 0 {
-			bucket := RateLimit{
-				TenantID: tenantId,
-				QueueID:  queue.ID,
-				Ts:       now,
-				N:        len(messageIDs),
-			}
-			res = tx.Clauses(clause.OnConflict{
-				DoUpdates: clause.Assignments(map[string]interface{}{"n": gorm.Expr("n + ?", len(messageIDs))}),
-			}).Create(&bucket)
-
-			if res.Error != nil && !errors.Is(res.Error, gorm.ErrDuplicatedKey) {
-				return res.Error
-			}
+		if res.Error != nil && !errors.Is(res.Error, gorm.ErrDuplicatedKey) {
+			return nil, res.Error
 		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
 	}
 
 	for _, messageId := range messageIDs {
 		log.Debug().Int64("message_id", messageId).Msg("Dequeued message")
 	}
 
+	tx.Commit()
+
 	return rc, nil
 }
 
-func (q *SQLiteQueue) Peek(tenantId int64, queueName string, messageId int64) *models.Message {
+func (q *DBQueue) Peek(tenantId int64, queueName string, messageId int64) *models.Message {
 	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return nil
@@ -502,7 +502,7 @@ func (q *SQLiteQueue) Peek(tenantId int64, queueName string, messageId int64) *m
 	return message.ToModel()
 }
 
-func (q *SQLiteQueue) Stats(tenantId int64, queueName string) models.QueueStats {
+func (q *DBQueue) Stats(tenantId int64, queueName string) models.QueueStats {
 	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return models.QueueStats{}
@@ -551,7 +551,7 @@ func (q *SQLiteQueue) Stats(tenantId int64, queueName string) models.QueueStats 
 	return stats
 }
 
-func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria models.FilterCriteria) []int64 {
+func (q *DBQueue) Filter(tenantId int64, queueName string, filterCriteria models.FilterCriteria) []int64 {
 	var rc []int64
 
 	queue, err := q.getQueue(tenantId, queueName)
@@ -585,13 +585,12 @@ func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria mo
 		sql += " ) GROUP BY message_id HAVING count(*) = ? LIMIT 10"
 		sql += " ) "
 
-	}
+		for k, v := range filterCriteria.KV {
+			args = append(args, k, v, tenantId, queue.ID)
+		}
 
-	for k, v := range filterCriteria.KV {
-		args = append(args, k, v, tenantId, queue.ID)
+		args = append(args, len(filterCriteria.KV))
 	}
-
-	args = append(args, len(filterCriteria.KV))
 
 	sql += "LIMIT 10"
 
@@ -603,7 +602,7 @@ func (q *SQLiteQueue) Filter(tenantId int64, queueName string, filterCriteria mo
 	return rc
 }
 
-func (q *SQLiteQueue) Delete(tenantId int64, queueName string, messageId int64) error {
+func (q *DBQueue) Delete(tenantId int64, queueName string, messageId int64) error {
 	queue, err := q.getQueue(tenantId, queueName)
 	if err != nil {
 		return err
@@ -631,7 +630,7 @@ func (q *SQLiteQueue) Delete(tenantId int64, queueName string, messageId int64) 
 	return err
 }
 
-func (q *SQLiteQueue) Shutdown() error {
+func (q *DBQueue) Shutdown() error {
 	db, err := q.DBG.DB()
 	if err != nil {
 		return err

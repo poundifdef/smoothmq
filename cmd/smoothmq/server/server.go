@@ -15,7 +15,7 @@ import (
 	"github.com/poundifdef/smoothmq/dashboard"
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/poundifdef/smoothmq/protocols/sqs"
-	"github.com/poundifdef/smoothmq/queue/sqlite"
+	"github.com/poundifdef/smoothmq/queue/database"
 	"github.com/poundifdef/smoothmq/tenants/defaultmanager"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -55,7 +55,7 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 
 	// Initialize default queue implementation
 	if queue == nil {
-		queue = sqlite.NewSQLiteQueue(cfg.SQLite)
+		queue = database.NewQueue(cfg)
 	}
 
 	dashboardServer := dashboard.NewDashboard(queue, tm, cfg.Dashboard)

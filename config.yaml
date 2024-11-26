@@ -11,5 +11,15 @@ server:
     enabled: true
     port: 3000
 
-  sqlite:
-    path: smoothmq.sqlite
+# One can use either the sqlite option or the db option to
+# configure the database
+#  sqlite:
+#    path: smoothmq.sqlite
+
+#  db:
+#    log-queries: false
+#    dsn: "host=db user=xxx password=xxx sslmode=disable TimeZone=America/Los_Angeles"
+#    driver: postgres
+# If you use this option and wish to use sqlite please add the following options to the filename
+#    dsn: "smoothmq.sqlite?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full"
+#    driver: sqlite
