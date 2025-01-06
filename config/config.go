@@ -28,10 +28,11 @@ type TesterCommand struct {
 }
 
 type ServerCommand struct {
-	SQS       SQSConfig       `embed:"" prefix:"sqs-" envprefix:"Q_SQS_"`
-	Dashboard DashboardConfig `embed:"" prefix:"dashboard-" envprefix:"Q_DASHBOARD_"`
-	SQLite    SQLiteConfig    `embed:"" prefix:"sqlite-" envprefix:"Q_SQLITE_"`
-	Metrics   MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"Q_METRICS_"`
+	SQS         SQSConfig         `embed:"" prefix:"sqs-" envprefix:"Q_SQS_"`
+	Dashboard   DashboardConfig   `embed:"" prefix:"dashboard-" envprefix:"Q_DASHBOARD_"`
+	SQLite      SQLiteConfig      `embed:"" prefix:"sqlite-" envprefix:"Q_SQLITE_"`
+	Distributed DistributedConfig `embed:"" prefix:"distributed-" envprefix:"Q_DISTRIBUTED_"`
+	Metrics     MetricsConfig     `embed:"" prefix:"metrics-" name:"metrics" envprefix:"Q_METRICS_"`
 
 	DisableTelemetry bool `name:"disable-telemetry" default:"false" env:"DISABLE_TELEMETRY"`
 	UseSinglePort    bool `name:"use-single-port" default:"false" env:"Q_SERVER_USE_SINGLE_PORT" help:"Enables having all HTTP services run on a single port with different endpoints"`
@@ -51,6 +52,19 @@ type MetricsConfig struct {
 
 type SQLiteConfig struct {
 	Path string `name:"path" help:"Path of SQLite file" default:"smoothmq.sqlite" env:"PATH"`
+}
+
+type DistributedConfig struct {
+	MemberlistPort int `name:"memberlist-port"`
+	RaftPort       int `name:"raft-port"`
+	GRPCPort       int `name:"grpc-port"`
+
+	Join []string `name:"join"`
+
+	Shard   string `name:"shard"`
+	Replica string `name:"replica"`
+
+	BootstrapShard bool `name:"bootstrap-shard" default:"false" negatable:""`
 }
 
 type SQSConfig struct {
