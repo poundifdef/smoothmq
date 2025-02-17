@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"net/http"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
+	"github.com/poundifdef/smoothmq/web"
 
 	"github.com/rs/zerolog/log"
 
@@ -26,7 +26,7 @@ import (
 var viewsfs embed.FS
 
 type Dashboard struct {
-	App *fiber.App
+	App *web.Web
 
 	queue         models.Queue
 	tenantManager models.TenantManager
@@ -34,7 +34,7 @@ type Dashboard struct {
 	cfg config.DashboardConfig
 }
 
-func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg config.DashboardConfig) *Dashboard {
+func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg config.DashboardConfig, tls config.TLSConfig) *Dashboard {
 	var engine *html.Engine
 
 	if cfg.Dev {
@@ -75,7 +75,6 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg co
 	}
 
 	d := &Dashboard{
-		App:           app,
 		queue:         queue,
 		tenantManager: tenantManager,
 		cfg:           cfg,
@@ -90,6 +89,12 @@ func NewDashboard(queue models.Queue, tenantManager models.TenantManager, cfg co
 	app.Post("/queues/:queue/delete", d.DeleteQueue)
 	app.Get("/queues/:queue/messages/:message", d.Message)
 
+	d.App = &web.Web{
+		FiberApp: app,
+		Port:     cfg.Port,
+		TLS:      tls,
+		Type:     "Dashboard"}
+
 	return d
 }
 
@@ -98,13 +103,12 @@ func (d *Dashboard) Start() error {
 		return nil
 	}
 
-	fmt.Printf("Dashboard: http://localhost:%d\n", d.cfg.Port)
-	return d.App.Listen(fmt.Sprintf(":%d", d.cfg.Port))
+	return d.App.Start()
 }
 
 func (d *Dashboard) Stop() error {
 	if d.cfg.Enabled {
-		return d.App.Shutdown()
+		return d.App.Stop()
 	}
 
 	return nil

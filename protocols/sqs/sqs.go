@@ -32,6 +32,7 @@ import (
 
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
+	"github.com/poundifdef/smoothmq/web"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/tidwall/gjson"
@@ -46,7 +47,7 @@ import (
 )
 
 type SQS struct {
-	App           *fiber.App
+	App           *web.Web
 	queue         models.Queue
 	tenantManager models.TenantManager
 
@@ -70,7 +71,7 @@ var requestStatus = promauto.NewCounterVec(
 	[]string{"tenant_id", "aws_method", "status"},
 )
 
-func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.SQSConfig) *SQS {
+func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.SQSConfig, tls config.TLSConfig) *SQS {
 	s := &SQS{
 		queue:         queue,
 		tenantManager: tenantManager,
@@ -91,7 +92,11 @@ func NewSQS(queue models.Queue, tenantManager models.TenantManager, cfg config.S
 	app.Use(s.authMiddleware)
 	app.Post("/*", s.Action)
 
-	s.App = app
+	s.App = &web.Web{
+		FiberApp: app,
+		Port:     cfg.Port,
+		TLS:      tls,
+		Type:     "SQS Endpoint"}
 
 	return s
 }
@@ -135,14 +140,14 @@ func (s *SQS) Start() error {
 		return nil
 	}
 
-	fmt.Printf("SQS Endpoint: http://localhost:%d\n", s.cfg.Port)
-	return s.App.Listen(fmt.Sprintf(":%d", s.cfg.Port))
+	return s.App.Start()
 }
 
 func (s *SQS) Stop() error {
 	if s.cfg.Enabled {
-		return s.App.Shutdown()
+		return s.App.Stop()
 	}
+
 	return nil
 }
 

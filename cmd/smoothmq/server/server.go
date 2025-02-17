@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/dashboard"
+	"github.com/poundifdef/smoothmq/metrics"
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/poundifdef/smoothmq/protocols/sqs"
 	"github.com/poundifdef/smoothmq/queue/sqlite"
 	"github.com/poundifdef/smoothmq/tenants/defaultmanager"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/poundifdef/smoothmq/web"
 )
 
 func recordTelemetry(message string, disabled bool) {
@@ -58,8 +58,9 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 		queue = sqlite.NewSQLiteQueue(cfg.SQLite)
 	}
 
-	dashboardServer := dashboard.NewDashboard(queue, tm, cfg.Dashboard)
-	sqsServer := sqs.NewSQS(queue, tm, cfg.SQS)
+	dashboardServer := dashboard.NewDashboard(queue, tm, cfg.Dashboard, cfg.TLS)
+	sqsServer := sqs.NewSQS(queue, tm, cfg.SQS, cfg.TLS)
+	metricsServer := metrics.NewMetrics(cfg.Metrics, cfg.TLS)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -73,47 +74,51 @@ func Run(tm models.TenantManager, queue models.Queue, cfg config.ServerCommand) 
 			sqsServer.Start()
 		}()
 
-		if cfg.Metrics.PrometheusEnabled {
-			fmt.Printf("Prometheus metrics: http://localhost:%d%s\n", cfg.Metrics.PrometheusPort, cfg.Metrics.PrometheusPath)
-			go func() {
-				http.Handle(cfg.Metrics.PrometheusPath, promhttp.Handler())
-				http.ListenAndServe(fmt.Sprintf(":%d", cfg.Metrics.PrometheusPort), nil)
-			}()
-		}
+		go func() {
+			metricsServer.Start()
+		}()
 
 		<-c // This blocks the main thread until an interrupt is received
 		fmt.Println("Gracefully shutting down...")
 
 		dashboardServer.Stop()
 		sqsServer.Stop()
+		metricsServer.Stop()
 	} else {
 		app := fiber.New(fiber.Config{
 			DisableStartupMessage: true,
 		})
 
-		if cfg.Dashboard.Enabled {
-			app.Mount("/", dashboardServer.App)
-			fmt.Printf("Dashboard http://localhost:%d\n", cfg.Port)
-		}
-
 		if cfg.SQS.Enabled {
-			app.Mount("/sqs", sqsServer.App)
-			fmt.Printf("SQS Endpoint http://localhost:%d/sqs\n", cfg.Port)
+			sqsServer.App.Port = cfg.Port
+			sqsServer.App.Path = "/sqs"
+			app.Mount("/sqs", sqsServer.App.FiberApp)
+			sqsServer.App.OutputPort()
 		}
 
 		if cfg.Metrics.PrometheusEnabled {
-			app.Group("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
-			fmt.Printf("Prometheus http://localhost:%d/metrics\n", cfg.Port)
+			// "/metrics" is the standard path for prometheus - no need to add it here
+			app.Mount("", metricsServer.App.FiberApp)
+			metricsServer.App.Port = cfg.Port
+			metricsServer.App.OutputPort()
 		}
 
+		// This needs to go last to avoid confliciting with prometheus
+		if cfg.Dashboard.Enabled {
+			dashboardServer.App.Port = cfg.Port
+			app.Mount("/", dashboardServer.App.FiberApp)
+			dashboardServer.App.OutputPort()
+		}
+
+		web_app := web.Web{FiberApp: app, TLS: cfg.TLS, Port: cfg.Port}
 		go func() {
-			app.Listen(fmt.Sprintf(":%d", cfg.Port))
+			web_app.Start()
 		}()
 
 		<-c // This blocks the main thread until an interrupt is received
 		fmt.Println("Gracefully shutting down...")
 
-		app.Shutdown()
+		web_app.Stop()
 	}
 
 	queue.Shutdown()

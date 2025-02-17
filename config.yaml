@@ -7,6 +7,12 @@ server:
       - accesskey: DEV_ACCESS_KEY_ID
         secretkey: DEV_SECRET_ACCESS_KEY
 
+# Allow for tls based servers
+#  tls:
+#    cert: /shared/ssl-certs/bundle.pem
+#    private-key: /shared/ssl-certs/pk.pem
+
+
   dashboard:
     enabled: true
     port: 3000

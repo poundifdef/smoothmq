@@ -29,6 +29,7 @@ type TesterCommand struct {
 
 type ServerCommand struct {
 	SQS       SQSConfig       `embed:"" prefix:"sqs-" envprefix:"Q_SQS_"`
+	TLS       TLSConfig       `embed:"" prefix:"tls-" envprefix:"Q_TLS_"`
 	Dashboard DashboardConfig `embed:"" prefix:"dashboard-" envprefix:"Q_DASHBOARD_"`
 	SQLite    SQLiteConfig    `embed:"" prefix:"sqlite-" envprefix:"Q_SQLITE_"`
 	Metrics   MetricsConfig   `embed:"" prefix:"metrics-" name:"metrics" envprefix:"Q_METRICS_"`
@@ -62,6 +63,11 @@ type SQSConfig struct {
 	MaxDelaySeconds  int      `name:"max-delay-seconds" default:"30" env:"MAX_DELAY_SECONDS" help:"Max allowed wait time for long polling"`
 	DelayRetryMillis int      `name:"delay-retry-millis" default:"1000" env:"DELAY_RETRY_MILLIS" help:"When long polling, how often to request new items"`
 	EndpointOverride string   `name:"endpoint-override" default:"" env:"ENDPOINT_OVERRIDE" help:"Endpoint to advertise in queue URLs. Defaults to HTTP hostname."`
+}
+
+type TLSConfig struct {
+	Cert       string `name:"cert" default:"" env:"CERT" help:"TLS Certificate"`
+	PrivateKey string `name:"private-key" default:"" env:"PRIVATE_KEY" help:"TLS Private Key"`
 }
 
 type AWSKey struct {
