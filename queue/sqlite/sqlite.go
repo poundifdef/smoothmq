@@ -17,7 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/bwmarrin/snowflake"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -108,7 +108,7 @@ func NewSQLiteQueue(cfg config.SQLiteConfig) *SQLiteQueue {
 		log.Fatal().Err(err).Send()
 	}
 
-	db, err := gorm.Open(sqlite.Open(cfg.Path+"?_journal_mode=WAL&_foreign_keys=off&_auto_vacuum=full"), &gorm.Config{TranslateError: true})
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: "libsql", DSN: os.Getenv("LIBSQL_URL")}), &gorm.Config{TranslateError: true})
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
