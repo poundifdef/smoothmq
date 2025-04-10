@@ -1,0 +1,38 @@
+
+<div class="ui breadcrumb">
+  <a class="section" href="/">Queues</a>
+  <div class="divider"> / </div>
+  <a class="section" href="/queues/{{.Queue.Name}}">{{.Queue.Name}}</a>
+</div>
+
+<div class="ui divider"></div>
+
+<div class="ui grid">
+
+    <div class="sixteen wide column">
+        <div class="ui pointing secondary menu">
+            <a class="item" href="/queues/{{.Queue.Name}}">Messages</a>
+            <a class="item active" href="/queues/{{.Queue.Name}}/settings">Settings</a>
+        </div>
+    </div>
+
+    <div class="sixteen wide column">
+
+<form class="ui form" method="post" action="/queues/{{.Queue.Name}}/settings">
+    <div class="field">
+      <label>Rate Limit (messages/second)</label>
+      <input type="text" name="rate_limit" value="{{.Queue.RateLimit}}">
+    </div>
+    <div class="field">
+        <label>Max Retries (how many times will we requeue message before failing)</label>
+        <input type="text" name="max_retries" value="{{.Queue.MaxRetries}}">
+    </div>
+    <div class="field">
+        <label>Message Timeout (seconds before message is requeued)</label>
+        <input type="text" name="visibility_timeout" value="{{.Queue.VisibilityTimeout}}">
+    </div>
+    <button class="ui button" type="submit">Save</button>
+  </form>
+
+    </div>
+</div>

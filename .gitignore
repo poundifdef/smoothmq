@@ -27,4 +27,7 @@ go.work.sum
 scratch/
 
 *.sqlite
+*.sqlite-*
 *.db
+
+smoothmq

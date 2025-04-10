@@ -1,5 +1,17 @@
-<h1>Queue {{.Queue}}</h1>
-<h2>Message {{.Message.ID}}</h2>
+
+<div class="ui breadcrumb">
+    <a class="section" href="/">Queues</a>
+    <div class="divider"> / </div>
+    <a class="section" href="/queues/{{.Queue}}">{{.Queue}}</a>
+    <div class="divider"> / </div>
+    <a class="section" href="/queues/{{.Queue}}/messages/{{.Message.ID}}">{{.Message.ID}}</a>
+  </div>
+  
+  <div class="ui divider"></div>
+
+
+<!-- <button class="ui mini primary basic button"><i class="pause icon"></i> Pause Message</button> -->
+<!-- <button class="ui mini negative basic button"><i class="trash icon"></i> Delete Message</button> -->
 
 <table class="ui celled table">
     <tbody>
@@ -11,7 +23,7 @@
         <td>k/v</td>
         <td>
             {{range $k, $v := .Message.KeyValues}}
-            {{$k}}: {{$v}}
+            <b>{{$k}}:</b> {{$v}}
             {{end}}
         </td>
     </tr>
@@ -20,9 +32,27 @@
         <td>{{.Message.DeliverAt}}</td>
     </tr>
     <tr>
-        <td>Message</td>
-        <td>{{printf "%s" .Message.Message}}</td>
+        <td>Last Delivered</td>
+        <td>{{.Message.DeliveredAt}}</td>
     </tr>
+    <tr>
+        <td>Delivery Attempts</td>
+        <td>{{.Message.Tries}}</td>
+    </tr>
+    <tr>
+        <td>Message</td>
+        <td style="word-break: break-word;">
+            {{printf "%s" .Message.Message}}
+        </td>
+    </tr>
+
+    {{ if .Message.IsB64 }}
+    <tr>
+        <td>Base64 Decoded</td>
+        <td> {{printf "%s" .Message.Base64Decode}}</td>
+    </tr>
+    {{end}}
+   
     </tbody>
 
 </table>

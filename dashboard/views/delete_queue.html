@@ -1,0 +1,8 @@
+<p>
+    Are you sure you want to delete queue <b>{{.Queue}}</b>?
+    This will permanently delete all messages.
+</p>
+
+<form method="post" action="/queues/{{.Queue}}/delete" style="display:inline;">
+    <button class="ui mini negative basic button">Delete</button>
+</form>

@@ -4,8 +4,6 @@ SmoothMQ is a drop-in replacement for SQS with a much smoother developer experie
 It has a functional UI, observability, tracing, message scheduling, and rate-limiting.
 SmoothMQ lets you run a private SQS instance on any cloud.
 
-<!-- A drop-in replacement for SQS designed for great developer experience and efficiency. -->
-
 ## Getting Started
 
 SmoothMQ deploys as a single go binary and can be used by any existing SQS client.
@@ -15,7 +13,7 @@ SmoothMQ deploys as a single go binary and can be used by any existing SQS clien
 This will run a UI on `:3000` and an SQS-compatible server on `:3001`.
 
 ```
-$ go run .
+$ go run . server
 ```
 
 ## Connecting

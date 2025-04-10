@@ -1,41 +1,34 @@
 package smoothmq
 
 import (
-	"fmt"
-	"net/http"
 	"os"
-	"os/signal"
-	"q/dashboard"
-	"q/models"
-	"q/protocols/sqs"
-	"syscall"
+	"path/filepath"
+	"strconv"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/poundifdef/smoothmq/cmd/smoothmq/server"
+	"github.com/poundifdef/smoothmq/cmd/smoothmq/tester"
+	"github.com/poundifdef/smoothmq/config"
+	"github.com/poundifdef/smoothmq/models"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
-func Run(tm models.TenantManager, queue models.Queue) {
-	dashboardServer := dashboard.NewDashboard(queue, tm)
-	go func() {
-		dashboardServer.Start()
-	}()
+func Run(command string, cfg *config.CLI, tenantManager models.TenantManager, queue models.Queue) {
+	zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
+		return filepath.Base(file) + ":" + strconv.Itoa(line)
+	}
 
-	sqsServer := sqs.NewSQS(queue, tm)
-	go func() {
-		sqsServer.Start()
-	}()
+	// TODO: read log level and format from config
+	logLevel, _ := zerolog.ParseLevel(cfg.Log.Level)
+	log.Logger = zerolog.New(os.Stderr).With().Timestamp().Caller().Logger().Level(logLevel)
+	if cfg.Log.Pretty {
+		log.Logger = log.Logger.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
 
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(":2112", nil)
-	}()
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-	<-c // This blocks the main thread until an interrupt is received
-	fmt.Println("Gracefully shutting down...")
-
-	dashboardServer.Stop()
-	sqsServer.Stop()
-	queue.Shutdown()
+	switch command {
+	case "tester":
+		tester.Run(cfg.Tester)
+	default:
+		server.Run(tenantManager, queue, cfg.Server)
+	}
 }

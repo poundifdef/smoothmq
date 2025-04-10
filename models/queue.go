@@ -1,5 +1,10 @@
 package models
 
+import "errors"
+
+var ErrInvalidQueueName = errors.New("Invalid queue name")
+var ErrQueueExists = errors.New("Queue already exists")
+
 type FilterCriteria struct {
 	MessageID int64
 
@@ -20,13 +25,23 @@ type FilterCriteria struct {
 	Limit int
 }
 
+type QueueProperties struct {
+	Name              string
+	RateLimit         float64
+	MaxRetries        int
+	VisibilityTimeout int
+}
+
 type Queue interface {
-	CreateQueue(tenantId int64, queue string) error
+	GetQueue(tenantId int64, queueName string) (QueueProperties, error)
+	CreateQueue(tenantId int64, properties QueueProperties) error
+	UpdateQueue(tenantId int64, queue string, properties QueueProperties) error
 	DeleteQueue(tenantId int64, queue string) error
 	ListQueues(tenantId int64) ([]string, error)
 
-	Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int, requeueIn int) (int64, error)
-	Dequeue(tenantId int64, queue string, numToDequeue int) ([]*Message, error)
+	Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error)
+	Dequeue(tenantId int64, queue string, numToDequeue int, requeueIn int) ([]*Message, error)
+	UpdateMessage(tenantId int64, queue string, messageId int64, m *Message) error
 
 	Peek(tenantId int64, queue string, messageId int64) *Message
 	Stats(tenantId int64, queue string) QueueStats
