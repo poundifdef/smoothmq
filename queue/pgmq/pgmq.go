@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"github.com/craigpastro/pgmq-go"
 	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -216,8 +217,17 @@ func (q *PGMQQueue) Dequeue(tenantId int64, queue string, numToDequeue int, visi
 }
 
 func (q *PGMQQueue) UpdateMessage(tenantId int64, queue string, messageId int64, m *models.Message) error {
-	// TODO: Change delivery time to m.DeliverAt
-	return fmt.Errorf("UpdateMessage not implemented")
+	queueName := buildTenantQueueName(tenantId, queue)
+	vtDeltaSeconds := int64(m.DeliverAt) - time.Now().Unix()
+	if vtDeltaSeconds < 0 {
+		vtDeltaSeconds = 0
+	}
+	sql := fmt.Sprintf(`
+		SELECT msg_id
+		FROM pgmq.set_vt(%s, %d, %d)
+	`, queueName, messageId, vtDeltaSeconds)
+	err := q.Gorm.Raw(sql).Error
+	return err
 }
 
 func (q *PGMQQueue) Peek(tenantId int64, queue string, messageId int64) *models.Message {
