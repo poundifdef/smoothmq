@@ -9,6 +9,7 @@ import (
 	"strings"
 	"github.com/craigpastro/pgmq-go"
 	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/poundifdef/smoothmq/config"
 	"github.com/poundifdef/smoothmq/models"
 	"github.com/rs/zerolog/log"
@@ -34,8 +35,8 @@ type MetaRow struct {
 }
 
 type PGMQQueue struct {
-	DB *gorm.DB
-	PGMQ *pgmq.PGMQ
+	Gorm *gorm.DB
+	Pool *pgxpool.Pool
 }
 
 func NewPGMQQueue(cfg config.PGMQConfig) (*PGMQQueue, error) {
@@ -44,13 +45,17 @@ func NewPGMQQueue(cfg config.PGMQConfig) (*PGMQQueue, error) {
 	if err != nil {
 		return nil, err
 	}
-	impl, err := pgmq.New(context.Background(), cfg.Uri)
+	err = db.Exec("CREATE EXTENSION IF NOT EXISTS pgmq;").Error
+	if err != nil {
+		return nil, err
+	}
+	pool, err := pgmq.NewPgxPool(context.Background(), cfg.Uri)
 	if err != nil {
 		return nil, err
 	}
 	driver := &PGMQQueue{
-		DB: db,
-		PGMQ: impl,
+		Gorm: db,
+		Pool: pool,
 	}
 	return driver, nil
 }
@@ -138,7 +143,7 @@ func (q *PGMQQueue) GetQueue(tenantId int64, queueName string) (models.QueueProp
 
 func (q *PGMQQueue) CreateQueue(tenantId int64, properties models.QueueProperties) error {
 	queueName := buildTenantQueueName(tenantId, properties.Name)
-	err := q.PGMQ.CreateQueue(context.TODO(), queueName)
+	err := pgmq.CreateQueue(context.TODO(), q.Pool, queueName)
 	return err
 }
 
@@ -148,14 +153,14 @@ func (q *PGMQQueue) UpdateQueue(tenantId int64, queue string, properties models.
 
 func (q *PGMQQueue) DeleteQueue(tenantId int64, queue string) error {
 	queueName := buildTenantQueueName(tenantId, queue)
-	err := q.PGMQ.DropQueue(context.TODO(), queueName)
+	err := pgmq.DropQueue(context.TODO(), q.Pool, queueName)
 	return err
 }
 
 func (q *PGMQQueue) ListQueues(tenantId int64) ([]string, error) {
 	rows := []MetaRow{}
 	pattern := fmt.Sprintf("tnt_%x_%%", uint64(tenantId))
-	query := q.DB.Table("pgmq.meta").Find(&rows, "queue_name LIKE ?", pattern)
+	query := q.Gorm.Table("pgmq.meta").Find(&rows, "queue_name LIKE ?", pattern)
 	if query.Error != nil {
 		return nil, query.Error
 	}
@@ -182,7 +187,7 @@ func (q *PGMQQueue) Enqueue(tenantId int64, queue string, message string, kv map
 	if err != nil {
 		return 0, err
 	}
-	msgId, err := q.PGMQ.Send(context.TODO(), queueName, rawMsg)
+	msgId, err := pgmq.Send(context.TODO(), q.Pool, queueName, rawMsg)
 	return msgId, err
 }
 
@@ -195,7 +200,7 @@ func (q *PGMQQueue) Dequeue(tenantId int64, queue string, numToDequeue int, requ
 		visibilityTimeoutSeconds = int64(requeueIn)
 	}
 
-	msgs, err := q.PGMQ.ReadBatch(context.TODO(), queueName, visibilityTimeoutSeconds, int64(numToDequeue))
+	msgs, err := pgmq.ReadBatch(context.TODO(), q.Pool, queueName, visibilityTimeoutSeconds, int64(numToDequeue))
 
 	if err != nil {
 		return nil, err
@@ -213,10 +218,15 @@ func (q *PGMQQueue) Dequeue(tenantId int64, queue string, numToDequeue int, requ
 	return out, nil
 }
 
+func (q *PGMQQueue) UpdateMessage(tenantId int64, queue string, messageId int64, m *models.Message) error {
+	// TODO: Change delivery time to m.DeliverAt
+	return fmt.Errorf("UpdateMessage not implemented")
+}
+
 func (q *PGMQQueue) Peek(tenantId int64, queue string, messageId int64) *models.Message {
 	table := buildTenantQueueTableName(tenantId, queue)
 	row := MessageRow{}
-	query := q.DB.Table(table).First(&row, "msg_id = ?", messageId)
+	query := q.Gorm.Table(table).First(&row, "msg_id = ?", messageId)
 	if query.Error != nil {
 		panic(query.Error)
 	}
@@ -244,7 +254,7 @@ func (q *PGMQQueue) Stats(tenantId int64, queue string) models.QueueStats {
 			ELSE 1
 		END AS s, count(*) FROM %s GROUP BY s
 	`, table)
-	res := q.DB.Raw(sql)
+	res := q.Gorm.Raw(sql)
 	rows, err := res.Rows()
 
 	if err != nil {
@@ -288,7 +298,7 @@ func (q *PGMQQueue) Filter(tenantId int64, queue string, filterCriteria models.F
 	}
 
 	sql := fmt.Sprintf("SELECT msg_id FROM %s %s LIMIT 10", tableName, whereClause)
-	res := q.DB.Raw(sql, args...).Scan(&messageIds)
+	res := q.Gorm.Raw(sql, args...).Scan(&messageIds)
 	if res.Error != nil {
 		log.Error().Err(res.Error).Msg("Unable to filter")
 	}
@@ -298,11 +308,11 @@ func (q *PGMQQueue) Filter(tenantId int64, queue string, filterCriteria models.F
 
 func (q *PGMQQueue) Delete(tenantId int64, queue string, messageId int64) error {
 	queueName := buildTenantQueueName(tenantId, queue)
-	_, err := q.PGMQ.Delete(context.TODO(), queueName, messageId)
+	_, err := pgmq.Delete(context.TODO(), q.Pool, queueName, messageId)
 	return err
 }
 
 func (q *PGMQQueue) Shutdown() error {
-	q.PGMQ.Close()
+	q.Pool.Close()
 	return nil
 }
