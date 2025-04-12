@@ -177,7 +177,7 @@ func (q *PGMQQueue) ListQueues(tenantId int64) ([]string, error) {
 	return queueNames, nil
 }
 
-func (q *PGMQQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delay int) (int64, error) {
+func (q *PGMQQueue) Enqueue(tenantId int64, queue string, message string, kv map[string]string, delaySeconds int) (int64, error) {
 	queueName := buildTenantQueueName(tenantId, queue)
 	envelope := Envelope{
 		Body: message,
@@ -187,20 +187,17 @@ func (q *PGMQQueue) Enqueue(tenantId int64, queue string, message string, kv map
 	if err != nil {
 		return 0, err
 	}
-	msgId, err := pgmq.Send(context.TODO(), q.Pool, queueName, rawMsg)
+	msgId, err := pgmq.SendWithDelay(context.TODO(), q.Pool, queueName, rawMsg, delaySeconds)
 	return msgId, err
 }
 
-func (q *PGMQQueue) Dequeue(tenantId int64, queue string, numToDequeue int, requeueIn int) ([]*models.Message, error) {
+func (q *PGMQQueue) Dequeue(tenantId int64, queue string, numToDequeue int, visibilityTimeoutSeconds int) ([]*models.Message, error) {
 	queueName := buildTenantQueueName(tenantId, queue)
-	var visibilityTimeoutSeconds int64
-	visibilityTimeoutSeconds = 0 // Use default
-
-	if requeueIn > 0 {
-		visibilityTimeoutSeconds = int64(requeueIn)
+	if (visibilityTimeoutSeconds < 0) {
+		visibilityTimeoutSeconds = 0 // Use default
 	}
 
-	msgs, err := pgmq.ReadBatch(context.TODO(), q.Pool, queueName, visibilityTimeoutSeconds, int64(numToDequeue))
+	msgs, err := pgmq.ReadBatch(context.TODO(), q.Pool, queueName, int64(visibilityTimeoutSeconds), int64(numToDequeue))
 
 	if err != nil {
 		return nil, err
