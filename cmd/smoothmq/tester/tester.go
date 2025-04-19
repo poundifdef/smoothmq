@@ -23,8 +23,6 @@ import (
 func Run(c smoothCfg.TesterCommand) {
 	var sentMessages, receivedMessages int
 
-	queueUrl := "https://sqs.us-east-1.amazonaws.com/123/test-queue"
-
 	// Load the AWS configuration with hardcoded credentials
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion("us-east-1"),
@@ -41,7 +39,9 @@ func Run(c smoothCfg.TesterCommand) {
 
 	var wg sync.WaitGroup
 
-	var ch chan int
+	ch := make(chan int)
+
+	queueUrl := createQueue(sqsClient)
 
 	for i := 0; i < c.Senders; i++ {
 		wg.Add(1)
@@ -71,6 +71,10 @@ func Run(c smoothCfg.TesterCommand) {
 				pct = float64(receivedMessages) / float64(sentMessages)
 			}
 			log.Info().Msg(fmt.Sprintf("sent: %d, received: %d, pct: %f", sentMessages, receivedMessages, pct))
+			if (sentMessages > 0 && sentMessages == receivedMessages) {
+				close(ch)
+				return
+			}
 			time.Sleep(1 * time.Second)
 		}
 	}()
@@ -79,12 +83,15 @@ func Run(c smoothCfg.TesterCommand) {
 
 	if c.Senders > 0 {
 		log.Info().Msg("All messages sent")
-		if c.Receivers == 0 {
-			os.Exit(0)
-		}
 	}
 
 	<-ch
+
+	// Test changing message visibility timeout
+	queueUrl2 := createQueue(sqsClient)
+	log.Info().Msgf("queue2: %s", queueUrl)
+	testChangeMessageVisibility(sqsClient, queueUrl2)
+	os.Exit(0)
 }
 
 func GenerateRandomString(n int) string {
@@ -94,6 +101,18 @@ func GenerateRandomString(n int) string {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+func createQueue(client *sqs.Client) string {
+	queueName := fmt.Sprintf("test-queue-%d", rand.Int())
+	i := &sqs.CreateQueueInput{
+		QueueName: &queueName,
+	}
+	result, err := client.CreateQueue(context.TODO(), i)
+	if err != nil {
+		log.Error().Err(err).Send()
+	}
+	return *result.QueueUrl
 }
 
 func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, batchSize, delaySeconds int) {
@@ -152,6 +171,47 @@ func sendMessage(client *sqs.Client, queueUrl string, goroutineID, requestID, ba
 	}
 
 	// time.Sleep(100 * time.Millisecond)
+}
+
+func testChangeMessageVisibility(client *sqs.Client, queueUrl string) {
+	log.Info().Msg("Testing ChangeMessageVisibility")
+	// Send a message
+	messageBody := "Test message for visibility timeout"
+	sendMessageInput := &sqs.SendMessageInput{
+		QueueUrl:    &queueUrl,
+		MessageBody: &messageBody,
+	}
+	sendMessageOutput, err := client.SendMessage(context.TODO(), sendMessageInput)
+	if err != nil {
+		log.Fatal().Msgf("failed to send message, %v", err)
+	}
+
+	for {
+		recvMsg := &sqs.ReceiveMessageInput{
+			QueueUrl:            aws.String(queueUrl),
+			MaxNumberOfMessages: 1,
+		}
+		msgs, err := client.ReceiveMessage(context.TODO(), recvMsg)
+		if err != nil {
+			log.Error().Err(err).Send()
+		}
+		if len(msgs.Messages) == 1 {
+			break
+		}
+	}
+
+	// Change the visibility timeout
+	changeVisibilityInput := &sqs.ChangeMessageVisibilityInput{
+		QueueUrl:          &queueUrl,
+		ReceiptHandle:     sendMessageOutput.MessageId,
+		VisibilityTimeout: 60,
+	}
+	_, err = client.ChangeMessageVisibility(context.TODO(), changeVisibilityInput)
+	if err != nil {
+		log.Fatal().Msgf("failed to change message visibility timeout, %v", err)
+	}
+
+	log.Info().Msg("Successfully changed message visibility timeout")
 }
 
 func receiveMessage(client *sqs.Client, queueUrl string, goroutineID int) int {
