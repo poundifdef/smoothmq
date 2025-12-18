@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  smoothmq:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smoothmq
+    ports:
+      - "3000:3000"  # Dashboard
+      - "3001:3001"  # SQS endpoint
+    volumes:
+      # Persist SQLite database
+      - ./data:/app/data
+      # Optional: mount config file (or use environment variables)
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      # Override SQLite path to use mounted volume
+      Q_SQLITE_PATH: /app/data/smoothmq.sqlite
+      # SQS Authentication Keys
+      # Set these in .env file (required)
+      DEV_ACCESS_KEY_ID: ${DEV_ACCESS_KEY_ID}
+      DEV_SECRET_ACCESS_KEY: ${DEV_SECRET_ACCESS_KEY}
+      # Q_SQS_KEYS format: "access_key:secret_key" or "key1:secret1,key2:secret2" for multiple
+      # Set in .env file, e.g., Q_SQS_KEYS="${DEV_ACCESS_KEY_ID}:${DEV_SECRET_ACCESS_KEY}"
+      Q_SQS_KEYS: ${Q_SQS_KEYS}
+      # Dashboard Authentication
+      Q_DASHBOARD_USER: ${Q_DASHBOARD_USER:-USER}
+      Q_DASHBOARD_PASS: ${Q_DASHBOARD_PASS:-PASSWORD}
+    command: ["run-app", "server", "--config", "/app/config.yaml"]
+    working_dir: /app
+    restart: unless-stopped
+    # Optional: Add healthcheck if you install curl/wget in Dockerfile
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:3000"] || exit 0
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 10s
+
