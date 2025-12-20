@@ -10,7 +10,5 @@ server:
   dashboard:
     enabled: true
     port: 3000
-    user: USER
-    pass: PASSWORD
   sqlite:
     path: smoothmq.sqlite

@@ -15,19 +15,27 @@ services:
       # Optional: mount config file (or use environment variables)
       - ./config.yaml:/app/config.yaml:ro
     environment:
-      # Override SQLite path to use mounted volume
-      Q_SQLITE_PATH: /app/data/smoothmq.sqlite
-      # SQS Authentication Keys
-      # Set these in .env file (required)
-      DEV_ACCESS_KEY_ID: ${DEV_ACCESS_KEY_ID}
-      DEV_SECRET_ACCESS_KEY: ${DEV_SECRET_ACCESS_KEY}
-      # Q_SQS_KEYS format: "access_key:secret_key" or "key1:secret1,key2:secret2" for multiple
-      # Set in .env file, e.g., Q_SQS_KEYS="${DEV_ACCESS_KEY_ID}:${DEV_SECRET_ACCESS_KEY}"
-      Q_SQS_KEYS: ${Q_SQS_KEYS}
-      # Dashboard Authentication
-      Q_DASHBOARD_USER: ${Q_DASHBOARD_USER:-USER}
-      Q_DASHBOARD_PASS: ${Q_DASHBOARD_PASS:-PASSWORD}
+      # SQLite database path inside the container
+      - Q_SQLITE_PATH=/app/data/smoothmq.sqlite
+      # SQS Keys in format "access_key:secret_key"
+      # This will check Q_SQS_KEYS first, then try to build it from DEV_ vars,
+      # and finally fall back to the defaults if nothing is set.
+      - Q_SQS_KEYS=${Q_SQS_KEYS:-${DEV_ACCESS_KEY_ID:-DEV_ACCESS_KEY_ID}:${DEV_SECRET_ACCESS_KEY:-DEV_SECRET_ACCESS_KEY}}
+      # Dashboard credentials
+      - Q_DASHBOARD_USER=${Q_DASHBOARD_USER:-admin}
+      - Q_DASHBOARD_PASS=${Q_DASHBOARD_PASS:-password}
+      # Host configuration - must be 0.0.0.0 in Docker to be accessible from host
+      - Q_SQS_HOST=0.0.0.0
+      - Q_DASHBOARD_HOST=0.0.0.0
+      # Logging configuration - set to "debug" or "trace" for more verbose logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_PRETTY=${LOG_PRETTY:-true}
     command: ["run-app", "server", "--config", "/app/config.yaml"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     working_dir: /app
     restart: unless-stopped
     # Optional: Add healthcheck if you install curl/wget in Dockerfile
