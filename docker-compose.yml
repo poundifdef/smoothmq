@@ -7,8 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: smoothmq
     ports:
-      - "3000:3000"  # Dashboard
-      - "3001:3001"  # SQS endpoint
+      - "8080:8080"  # Unified port (Dashboard at /, SQS at /sqs)
     volumes:
       # Persist SQLite database
       - ./data:/app/data
@@ -24,9 +23,9 @@ services:
       # Dashboard credentials
       - Q_DASHBOARD_USER=${Q_DASHBOARD_USER:-admin}
       - Q_DASHBOARD_PASS=${Q_DASHBOARD_PASS:-password}
-      # Host configuration - must be 0.0.0.0 in Docker to be accessible from host
-      - Q_SQS_HOST=0.0.0.0
-      - Q_DASHBOARD_HOST=0.0.0.0
+      # Single port mode configuration
+      - Q_SERVER_USE_SINGLE_PORT=true
+      - PORT=8080
       # Logging configuration - set to "debug" or "trace" for more verbose logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_PRETTY=${LOG_PRETTY:-true}
