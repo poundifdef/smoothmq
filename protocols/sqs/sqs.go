@@ -175,6 +175,8 @@ func (s *SQS) Action(c *fiber.Ctx) error {
 		rc = s.ReceiveMessage(c, tenantId)
 	case "AmazonSQS.DeleteMessage":
 		rc = s.DeleteMessage(c, tenantId)
+	case "AmazonSQS.DeleteMessageBatch":
+		rc = s.DeleteMessageBatch(c, tenantId)
 	case "AmazonSQS.ListQueues":
 		rc = s.ListQueues(c, tenantId)
 	case "AmazonSQS.GetQueueUrl":
@@ -594,6 +596,64 @@ func (s *SQS) DeleteMessage(c *fiber.Ctx, tenantId int64) error {
 	}
 
 	return nil
+}
+
+func (s *SQS) DeleteMessageBatch(c *fiber.Ctx, tenantId int64) error {
+	batchReq := &DeleteMessageBatchRequest{}
+
+	err := json.Unmarshal(c.Body(), batchReq)
+	if err != nil {
+		return err
+	}
+
+	tokens := strings.Split(batchReq.QueueUrl, "/")
+	queue := tokens[len(tokens)-1]
+
+	response := &DeleteMessageBatchResponse{}
+
+	// First pass: validate receipt handles and collect valid message IDs
+	validEntries := make([]DeleteMessageBatchRequestEntry, 0, len(batchReq.Entries))
+	messageIds := make([]int64, 0, len(batchReq.Entries))
+
+	for _, req := range batchReq.Entries {
+		messageId, err := strconv.ParseInt(req.ReceiptHandle, 10, 64)
+		if err != nil {
+			response.Failed = append(response.Failed, BatchResultErrorEntry{
+				ID:          req.ID,
+				SenderFault: true,
+				Code:        "InvalidParameterValue",
+				Message:     "Invalid ReceiptHandle",
+			})
+			continue
+		}
+		validEntries = append(validEntries, req)
+		messageIds = append(messageIds, messageId)
+	}
+
+	// Batch delete all valid messages at once
+	if len(messageIds) > 0 {
+		err = s.queue.DeleteBatch(tenantId, queue, messageIds)
+		if err != nil {
+			// If batch delete fails, mark all as failed
+			for _, req := range validEntries {
+				response.Failed = append(response.Failed, BatchResultErrorEntry{
+					ID:          req.ID,
+					SenderFault: false,
+					Code:        "InternalFailure",
+					Message:     err.Error(),
+				})
+			}
+		} else {
+			// All succeeded
+			for _, req := range validEntries {
+				response.Successful = append(response.Successful, DeleteMessageBatchResultEntry{
+					ID: req.ID,
+				})
+			}
+		}
+	}
+
+	return c.JSON(response)
 }
 
 func (s *SQS) ChangeMessageVisibility(c *fiber.Ctx, tenantId int64) error {

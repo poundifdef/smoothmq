@@ -473,7 +473,8 @@ func (q *SQLiteQueue) Dequeue(tenantId int64, queueName string, numToDequeue int
 	}
 
 	err = q.DBG.Transaction(func(tx *gorm.DB) error {
-		res = tx.Model(&Message{}).Where("tenant_id = ? AND queue_id = ? AND id in ?", tenantId, queue.ID, messageIDs).
+		// Use primary key only for faster lookup - IDs already filtered by tenant/queue in Find above
+		res = tx.Model(&Message{}).Where("id IN ?", messageIDs).
 			UpdateColumns(map[string]any{
 				"tries":        gorm.Expr("tries+1"),
 				"delivered_at": now,
@@ -645,11 +646,13 @@ func (q *SQLiteQueue) Delete(tenantId int64, queueName string, messageId int64) 
 	defer q.Mu.Unlock()
 
 	err = q.DBG.Transaction(func(tx *gorm.DB) error {
+		// KV uses composite index idx_kv(tenant_id, queue_id, message_id), so keep all filters
 		if err := tx.Where("tenant_id = ? AND queue_id = ? AND message_id = ?", tenantId, queue.ID, messageId).Delete(&KV{}).Error; err != nil {
 			return err
 		}
 
-		if err := tx.Where("tenant_id = ? AND queue_id = ? AND id = ?", tenantId, queue.ID, messageId).Delete(&Message{}).Error; err != nil {
+		// Message uses primary key on id, so query by id only for faster lookup
+		if err := tx.Where("id = ?", messageId).Delete(&Message{}).Error; err != nil {
 			return err
 		}
 
@@ -658,6 +661,40 @@ func (q *SQLiteQueue) Delete(tenantId int64, queueName string, messageId int64) 
 
 	if err == nil {
 		log.Debug().Int64("message_id", messageId).Msg("Deleted message")
+	}
+
+	return err
+}
+
+func (q *SQLiteQueue) DeleteBatch(tenantId int64, queueName string, messageIds []int64) error {
+	if len(messageIds) == 0 {
+		return nil
+	}
+
+	queue, err := q.getQueue(tenantId, queueName)
+	if err != nil {
+		return err
+	}
+
+	q.Mu.Lock()
+	defer q.Mu.Unlock()
+
+	err = q.DBG.Transaction(func(tx *gorm.DB) error {
+		// KV uses composite index idx_kv(tenant_id, queue_id, message_id), so keep all filters
+		if err := tx.Where("tenant_id = ? AND queue_id = ? AND message_id IN ?", tenantId, queue.ID, messageIds).Delete(&KV{}).Error; err != nil {
+			return err
+		}
+
+		// Message uses primary key on id, so query by id only for faster lookup
+		if err := tx.Where("id IN ?", messageIds).Delete(&Message{}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err == nil {
+		log.Debug().Interface("message_ids", messageIds).Msg("Deleted messages in batch")
 	}
 
 	return err

@@ -48,6 +48,7 @@ type Queue interface {
 	Filter(tenantId int64, queue string, filterCriteria FilterCriteria) []int64
 
 	Delete(tenantId int64, queue string, messageId int64) error
+	DeleteBatch(tenantId int64, queue string, messageIds []int64) error
 
 	Shutdown() error
 }

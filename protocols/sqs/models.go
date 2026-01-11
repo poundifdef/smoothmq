@@ -145,10 +145,33 @@ type SendMessageBatchResultEntry struct {
 	SequenceNumber         string `json:"SequenceNumber,omitempty"`
 }
 
-// BatchResultErrorEntry represents a failed entry in the SendMessageBatch operation.
+// BatchResultErrorEntry represents a failed entry in batch operations.
 type BatchResultErrorEntry struct {
 	ID          string `json:"Id"`
 	SenderFault bool   `json:"SenderFault"`
 	Code        string `json:"Code"`
 	Message     string `json:"Message"`
+}
+
+// DeleteMessageBatchRequest represents the input for the DeleteMessageBatch operation.
+type DeleteMessageBatchRequest struct {
+	QueueUrl string                           `json:"QueueUrl"`
+	Entries  []DeleteMessageBatchRequestEntry `json:"Entries"`
+}
+
+// DeleteMessageBatchRequestEntry represents an entry in the DeleteMessageBatch operation.
+type DeleteMessageBatchRequestEntry struct {
+	ID            string `json:"Id"`
+	ReceiptHandle string `json:"ReceiptHandle"`
+}
+
+// DeleteMessageBatchResponse represents the output for the DeleteMessageBatch operation.
+type DeleteMessageBatchResponse struct {
+	Successful []DeleteMessageBatchResultEntry `json:"Successful"`
+	Failed     []BatchResultErrorEntry         `json:"Failed"`
+}
+
+// DeleteMessageBatchResultEntry represents a successful entry in the DeleteMessageBatch operation.
+type DeleteMessageBatchResultEntry struct {
+	ID string `json:"Id"`
 }
